@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
 import { useRunStore } from '../store/run.js';
+import TutorChatbot from '../components/chat/TutorChatbot.jsx';
 
 const SEVERITY_CONFIG = {
   error:   { label: 'Error',   color: 'var(--err)',  bg: '#FEF2F2', border: '#FECACA', icon: '✕' },
@@ -32,15 +33,15 @@ export default function Analysis() {
   }
 
   return (
-    <div style={{ padding: '32px 40px 64px', maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ padding: '32px 40px 64px', maxWidth: 840, margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <Link to={`/sim/${id}`} className="back-btn" id="analysis-back-btn" style={{ marginBottom: 12, display: 'inline-flex' }}>
           <ChevronLeft size={15} /> Back to simulation
         </Link>
-        <h1 className="display-lg" style={{ marginBottom: 6 }}>Analysis</h1>
-        <p className="body-md">How Gemma understood your diagram.</p>
+        <h1 className="display-lg" style={{ marginBottom: 6 }}>Analysis & AI Tutor</h1>
+        <p className="body-md">How Gemma understood your diagram, verified calculations, and tutor dialogue.</p>
       </div>
 
       {/* 1. Concept explanation */}
@@ -55,7 +56,7 @@ export default function Analysis() {
       <Card id="issues-card" style={{ marginBottom: 16 }}>
         <SectionLabel>
           Detected Issues
-          {audit.detected_issues.length > 0 && (
+          {audit.detected_issues?.length > 0 && (
             <span
               className="badge badge-warn"
               style={{ marginLeft: 8, fontWeight: 600 }}
@@ -64,7 +65,7 @@ export default function Analysis() {
             </span>
           )}
         </SectionLabel>
-        {audit.detected_issues.length === 0 ? (
+        {(!audit.detected_issues || audit.detected_issues.length === 0) ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ok)', fontSize: 14 }}>
             <CheckCircle2 size={16} />
             No issues found. Everything checks out.
@@ -80,8 +81,8 @@ export default function Analysis() {
 
       {/* 3. Extracted values */}
       <Card id="extracted-values-card" style={{ marginBottom: 16 }}>
-        <SectionLabel>Extracted Values</SectionLabel>
-        {audit.inference_trace.length === 0 ? (
+        <SectionLabel>Extracted Values & Inference Trace</SectionLabel>
+        {(!audit.inference_trace || audit.inference_trace.length === 0) ? (
           <p className="body-sm">No trace data available.</p>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -140,9 +141,13 @@ export default function Analysis() {
       )}
 
       {/* 5. Raw JSON */}
-      <Card id="raw-json-card">
+      <Card id="raw-json-card" style={{ marginBottom: 16 }}>
         <RawJson data={extractedData} />
       </Card>
+
+      {/* 6. Gemma 4 AI Lab Tutor Chatbot */}
+      <TutorChatbot diagramType={diagramType} extractedData={extractedData} />
+
     </div>
   );
 }
@@ -163,65 +168,45 @@ function Card({ children, id, style }) {
 
 function SectionLabel({ children }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
+    <p style={{
       fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
       textTransform: 'uppercase', color: 'var(--muted)',
-      fontFamily: 'var(--font-mono)', marginBottom: 14,
+      fontFamily: 'var(--font-mono)', marginBottom: 10,
+      display: 'flex', alignItems: 'center',
     }}>
       {children}
-    </div>
+    </p>
   );
 }
 
 function IssueCard({ issue, simId }) {
   const cfg = SEVERITY_CONFIG[issue.severity] || SEVERITY_CONFIG.info;
-
   return (
     <div style={{
-      padding: '12px 14px', borderRadius: 10,
       background: cfg.bg, border: `1px solid ${cfg.border}`,
+      borderRadius: 8, padding: '12px 14px',
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
         <span style={{
-          width: 20, height: 20, borderRadius: '50%',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 16, height: 16, borderRadius: '50%',
           background: cfg.color, color: 'white',
-          display: 'grid', placeItems: 'center',
-          fontSize: 11, fontWeight: 700, flexShrink: 0,
+          fontSize: 10, fontWeight: 700,
         }}>
           {cfg.icon}
         </span>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
-              {cfg.label}
-            </span>
-            <span style={{
-              padding: '1px 7px', borderRadius: 99,
-              background: 'rgba(255,255,255,.6)', border: `1px solid ${cfg.border}`,
-              fontSize: 11, color: cfg.color, fontFamily: 'var(--font-mono)',
-            }}>
-              {issue.location}
-            </span>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--ink)', marginBottom: issue.suggested_fix ? 8 : 0, lineHeight: 1.5 }}>
-            {issue.issue}
-          </p>
-          {issue.suggested_fix && (
-            <p style={{ fontSize: 12, color: 'var(--ink-2)', fontStyle: 'italic', lineHeight: 1.45 }}>
-              Fix: {issue.suggested_fix}
-            </p>
-          )}
-          {simId && (
-            <Link
-              to={`/sim/${simId}?focus=${encodeURIComponent(issue.location)}`}
-              style={{ fontSize: 12, color: 'var(--info)', display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8 }}
-            >
-              Show on diagram →
-            </Link>
-          )}
-        </div>
+        <strong style={{ fontSize: 13, color: 'var(--navy)' }}>
+          {issue.location || 'Observation'}
+        </strong>
       </div>
+      <p style={{ fontSize: 13, color: 'var(--ink)', margin: '0 0 6px', lineHeight: 1.5 }}>
+        {issue.issue}
+      </p>
+      {issue.suggested_fix && (
+        <p style={{ fontSize: 12, color: 'var(--ink-2)', margin: 0, fontStyle: 'italic' }}>
+          Suggested fix: {issue.suggested_fix}
+        </p>
+      )}
     </div>
   );
 }

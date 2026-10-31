@@ -7,6 +7,7 @@ export default defineConfig({
     proxy: {
       "/extract": "http://localhost:8000",
       "/health":  "http://localhost:8000",
+      "/chat":    "http://localhost:8000",
     },
   },
 });

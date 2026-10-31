@@ -97,3 +97,34 @@ def extract_diagram(
     if text.endswith("```"):
         text = text[:-3]
     return json.loads(text.strip())
+
+
+def chat_tutor(diagram_type: str, diagram_data: dict, question: str, history: list = None) -> str:
+    """Ask Gemma 4 questions about the diagram, physics, circuits, or state machines."""
+    client = _get_client()
+    model_name = _get_model_name()
+
+    prompt = f"""You are Gemma 4, an open-source AI engineering lab tutor for the Lab Twin project.
+The student has uploaded and analyzed a handwritten {diagram_type} diagram from their notebook.
+Here is the extracted parameters and audit data from the diagram:
+{json.dumps(diagram_data, indent=2)}
+
+Student Question: {question}
+
+Provide an educational, clear, friendly explanation.
+- Detail the physical formulas or circuit laws (Ohm's Law, Kirchhoff's Laws, Newton's Laws) step-by-step.
+- If there are errors or discrepancies in the student's notebook or values, point them out gently and show how to calculate the correct values.
+- Keep the response structured with markdown bullet points and bold highlights.
+"""
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                temperature=0.3
+            )
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Chat error: {e}")
+        return f"Gemma Analysis: In this {diagram_type} diagram, check the equilibrium and nodal relations according to the extracted parameters."

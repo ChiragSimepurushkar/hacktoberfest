@@ -1,9 +1,11 @@
 """Lab Twin — FastAPI backend.
 
-Single responsibility: POST /extract
-  image → classify → extract → pydantic-validate (+ retry) → JSON response
+Endpoints:
+  POST /extract: image → classify → extract → pydantic-validate (+ retry) → JSON response
+  POST /chat: diagram_type + diagram_data + question → Gemma 4 tutor explanation
 """
 import json
+from pydantic import BaseModel
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,13 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from models.free_body import FreeBodyDiagram
 from models.circuit import Circuit
 from models.state_machine import StateMachine
-from services.gemma import classify_image, extract_diagram, MAX_RETRIES
+from services.gemma import classify_image, extract_diagram, chat_tutor, MAX_RETRIES
 
 app = FastAPI(title="Lab Twin API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # restrict in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,6 +34,25 @@ _SCHEMA_MAP = {
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+class ChatRequest(BaseModel):
+    diagram_type: str
+    diagram_data: dict = {}
+    question: str
+    history: list = []
+
+
+@app.post("/chat")
+def chat(req: ChatRequest):
+    """Interactive AI lab tutor powered by Gemma 4."""
+    answer = chat_tutor(
+        diagram_type=req.diagram_type,
+        diagram_data=req.diagram_data,
+        question=req.question,
+        history=req.history
+    )
+    return {"status": "ok", "answer": answer}
 
 
 @app.post("/extract")

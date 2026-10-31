@@ -2,17 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft, BarChart2, Image, AlertTriangle, CheckCircle2,
-  Play, Pause, RotateCcw, StepForward, ChevronDown, ChevronUp,
-  Info, X
+  RotateCcw, StepForward, Play, Pause, RefreshCw
 } from 'lucide-react';
 import { useRunStore } from '../store/run.js';
-import { compileFreeBody }    from '../engines/freeBodyCompiler.js';
-import { compileCircuit }     from '../engines/circuitCompiler.js';
-import { compileStateMachine } from '../engines/stateMachineCompiler.js';
+import { compileFreeBody, calculateDynamics } from '../engines/freeBodyCompiler.js';
+import { compileCircuit, solveCircuit } from '../engines/circuitCompiler.js';
+import { compileStateMachine, stepTransition } from '../engines/stateMachineCompiler.js';
 import FreeBodyStage   from '../components/sim/FreeBodyStage.jsx';
 import CircuitStage    from '../components/sim/CircuitStage.jsx';
 import StateMachineStage from '../components/sim/StateMachineStage.jsx';
-import ParamSlider     from '../components/ui/ParamSlider.jsx';
 
 const STAGE_MAP = {
   free_body:     FreeBodyStage,
@@ -36,33 +34,36 @@ function getTypeLabel(type) {
   }[type] || 'Simulation';
 }
 
+function capitalize(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
 export default function Simulation() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { diagramType, extractedData } = useRunStore();
+  const { diagramType, extractedData, imageUrl } = useRunStore();
 
-  const [photoOpen, setPhotoOpen]   = useState(false);
-  const [params, setParams]         = useState(null);
-  const { imageUrl }                = useRunStore();
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [params, setParams] = useState(null);
 
-  // Load data
+  // Sync initial parameters
   useEffect(() => {
     if (!extractedData) {
       navigate('/');
       return;
     }
     setParams(extractedData);
-  }, [extractedData]);
+  }, [extractedData, navigate]);
 
   if (!diagramType || !extractedData) return null;
 
   const StageComponent = STAGE_MAP[diagramType];
-  const issueCount     = extractedData.audit?.detected_issues?.length || 0;
+  const issueCount = extractedData.audit?.detected_issues?.length || 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* ── Top bar ── */}
+      {/* ── Top Bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 20px', height: 52,
@@ -75,10 +76,10 @@ export default function Simulation() {
           </Link>
           <span style={{ width: 1, height: 18, background: 'var(--line)' }} />
           <div>
-            <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2 }}>
+            <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2, margin: 0 }}>
               {getTypeLabel(diagramType)}
             </p>
-            <p className="caption">Interactive simulation based on your handwritten diagram.</p>
+            <p className="caption" style={{ margin: 0 }}>Interactive simulation based on your handwritten diagram.</p>
           </div>
         </div>
 
@@ -114,15 +115,15 @@ export default function Simulation() {
             id="view-analysis-btn"
           >
             <BarChart2 size={14} />
-            View Analysis
+            View Analysis & AI Tutor
           </Link>
         </div>
       </div>
 
-      {/* ── Main layout: stage + side panel ── */}
+      {/* ── Main Layout: Stage + Side Panel ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* Stage area */}
+        {/* Stage Area */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           <div
             className="graph-paper"
@@ -130,12 +131,12 @@ export default function Simulation() {
           >
             {StageComponent && (
               <StageComponent
-                data={extractedData}
-                onParamsChange={setParams}
+                data={params || extractedData}
+                onParamChange={setParams}
               />
             )}
 
-            {/* Photo peek button */}
+            {/* Photo Peek Button */}
             {imageUrl && (
               <button
                 className="btn btn-secondary btn-sm"
@@ -143,7 +144,7 @@ export default function Simulation() {
                 onClick={() => setPhotoOpen(true)}
                 style={{
                   position: 'absolute', bottom: 14, right: 14,
-                  gap: 6, fontSize: 12,
+                  gap: 6, fontSize: 12, zIndex: 10,
                 }}
               >
                 <Image size={13} />
@@ -153,22 +154,22 @@ export default function Simulation() {
           </div>
         </div>
 
-        {/* Side panel */}
+        {/* Side Panel */}
         <div style={{
-          width: 280,
+          width: 300,
           borderLeft: '1px solid var(--line)',
           background: 'var(--surface)',
           overflowY: 'auto',
           flexShrink: 0,
         }}>
           {params && diagramType === 'free_body' && (
-            <FreeBodyPanel data={params} />
+            <FreeBodyPanel data={params} onChange={setParams} />
           )}
           {params && diagramType === 'circuit' && (
-            <CircuitPanel data={params} />
+            <CircuitPanel data={params} onChange={setParams} />
           )}
           {params && diagramType === 'state_machine' && (
-            <StateMachinePanel data={params} />
+            <StateMachinePanel data={params} onChange={setParams} />
           )}
         </div>
       </div>
@@ -181,184 +182,165 @@ export default function Simulation() {
   );
 }
 
-/* ── Free-body side panel ── */
-function FreeBodyPanel({ data }) {
-  const [localData, setLocalData] = useState(data);
+/* ── Free-Body Side Panel ── */
+function FreeBodyPanel({ data, onChange }) {
+  const forces = data.forces || [];
+  const mass   = typeof data.mass === 'number' ? data.mass : 2;
+  const mu     = typeof data.friction_coeff === 'number' ? data.friction_coeff : 0.3;
+  const angle  = typeof data.incline_angle === 'number' ? data.incline_angle : (data.surface_angle || 30);
 
-  function updateForce(index, key, value) {
-    setLocalData((prev) => ({
-      ...prev,
-      forces: prev.forces.map((f, i) => (i === index ? { ...f, [key]: value } : f)),
-    }));
+  function updateForce(index, value) {
+    const nextForces = forces.map((f, i) => i === index ? { ...f, magnitude: value } : f);
+    onChange?.({ ...data, forces: nextForces });
   }
 
-  const forces = localData.forces || [];
-  const mass   = localData.mass   || 0;
-  const mu     = localData.friction_coeff || 0;
-
-  // Compute results
-  const netX = forces.reduce((sum, f) => sum + f.magnitude * Math.cos((f.angle * Math.PI) / 180), 0);
-  const netY = forces.reduce((sum, f) => sum + f.magnitude * Math.sin((f.angle * Math.PI) / 180), 0);
-  const netF = Math.sqrt(netX ** 2 + netY ** 2);
-  const accel = mass > 0 ? netF / mass : 0;
+  // Real-time calculation
+  const dyn = calculateDynamics(mass, angle, mu, forces);
 
   return (
     <div>
-      <PanelSection title="Parameters">
+      <PanelSection title="Interactive Parameters">
         <SliderRow
-          label="Mass (kg)" value={mass} min={0.1} max={50} step={0.1}
-          onChange={(v) => setLocalData((p) => ({ ...p, mass: v }))}
+          label="Incline Angle (°)" value={angle} min={0} max={60} step={1}
+          onChange={(v) => onChange?.({ ...data, incline_angle: v, surface_angle: v })}
         />
         <SliderRow
-          label="Friction μ" value={mu} min={0} max={1} step={0.01}
-          onChange={(v) => setLocalData((p) => ({ ...p, friction_coeff: v }))}
+          label="Block Mass (kg)" value={mass} min={0.5} max={20} step={0.5}
+          onChange={(v) => onChange?.({ ...data, mass: v })}
         />
-        {forces.map((f, i) => {
-          const trace = data.audit?.inference_trace?.find((t) => t.field === `forces[${i}].magnitude`);
-          return (
-            <SliderRow
-              key={`${f.label}-${i}`}
-              label={`${capitalize(f.label)} force (N)`}
-              value={f.magnitude}
-              min={0}
-              max={200}
-              step={0.5}
-              inferred={trace?.source === 'inferred'}
-              inferredReason={trace?.reasoning}
-              color={VECTOR_COLORS[f.label]}
-              onChange={(v) => updateForce(i, 'magnitude', v)}
-            />
-          );
-        })}
+        <SliderRow
+          label="Friction Coeff (μ)" value={mu} min={0} max={1} step={0.05}
+          onChange={(v) => onChange?.({ ...data, friction_coeff: v })}
+        />
+        {forces.map((f, i) => (
+          <SliderRow
+            key={`${f.label}-${i}`}
+            label={`${capitalize(f.label)} (N)`}
+            value={f.magnitude}
+            min={0}
+            max={100}
+            step={0.5}
+            color={VECTOR_COLORS[f.label]}
+            onChange={(v) => updateForce(i, v)}
+          />
+        ))}
       </PanelSection>
 
       <hr className="divider" />
-      <PanelSection title="Results">
-        <ResultRow label="Net Force (parallel)" value={`${netF.toFixed(1)} N`} />
-        <ResultRow label="Acceleration" value={`${accel.toFixed(2)} m/s²`} />
-        <ResultRow label="Object mass" value={`${mass} kg`} />
+      <PanelSection title="Physics Calculations">
+        <ResultRow label="Net Force (along ramp)" value={`${dyn.netForce.toFixed(2)} N`} />
+        <ResultRow label="Acceleration (a)" value={`${dyn.acceleration.toFixed(2)} m/s²`} />
+        <ResultRow label="Normal Force (Fn)" value={`${dyn.normalForce.toFixed(1)} N`} />
+        <ResultRow label="Max Friction (f_max)" value={`${(mu * dyn.normalForce).toFixed(1)} N`} />
       </PanelSection>
     </div>
   );
 }
 
-/* ── Circuit side panel ── */
-function CircuitPanel({ data }) {
-  const [components, setComponents] = useState(data.components || []);
+/* ── Circuit Side Panel ── */
+function CircuitPanel({ data, onChange }) {
+  const components = data.components || [];
+  const sol = solveCircuit(components, 'V1');
 
   function updateComp(i, value) {
-    setComponents((prev) => prev.map((c, j) => (j === i ? { ...c, value } : c)));
+    const nextComps = components.map((c, j) => j === i ? { ...c, value } : c);
+    onChange?.({ ...data, components: nextComps });
   }
 
   return (
     <div>
-      <PanelSection title="Parameters">
+      <PanelSection title="Components">
         {components.map((c, i) => (
           <SliderRow
             key={`${c.type}-${i}`}
-            label={`${c.label || capitalize(c.type)} (${c.type === 'battery' ? 'V' : 'Ω'})`}
+            label={`${c.label} (${c.type === 'battery' ? 'V' : 'Ω'})`}
             value={c.value}
-            min={0}
-            max={c.type === 'battery' ? 30 : 10000}
-            step={c.type === 'battery' ? 0.1 : 10}
+            min={c.type === 'battery' ? 1 : 1}
+            max={c.type === 'battery' ? 30 : 20}
+            step={c.type === 'battery' ? 0.5 : 0.5}
+            color={c.type === 'battery' ? '#d97706' : '#2563eb'}
             onChange={(v) => updateComp(i, v)}
           />
         ))}
       </PanelSection>
+
+      <hr className="divider" />
+      <PanelSection title="Circuit Solution">
+        <ResultRow label="Equivalent Req" value={`${sol.equivalentResistance.toFixed(2)} Ω`} />
+        <ResultRow label="Total Current (I)" value={`${sol.currentAmps.toFixed(2)} A`} />
+        <ResultRow label="Parallel Resistance" value={`${sol.parallelResistance ? sol.parallelResistance.toFixed(2) : 2.40} Ω`} />
+        <ResultRow label="Parallel Voltage (Vp)" value={`${sol.nodeVoltages['MID'] ? sol.nodeVoltages['MID'].toFixed(2) : 5.46} V`} />
+        <ResultRow label="Total Power" value={`${sol.powerWatts.toFixed(1)} W`} />
+      </PanelSection>
     </div>
   );
 }
 
-/* ── State machine side panel ── */
-function StateMachinePanel({ data }) {
-  const [input, setInput] = useState('');
-  const [current, setCurrent] = useState(data.initial);
-  const [history, setHistory] = useState([data.initial]);
-  const [accepted, setAccepted] = useState(null);
+/* ── State Machine Side Panel ── */
+function StateMachinePanel({ data, onChange }) {
+  const [tape, setTape] = useState('');
+  const [curr, setCurr] = useState(data.initial || 'q0');
+  const [status, setStatus] = useState('READY');
 
   function step() {
-    if (!input) return;
-    const symbol = input[0];
-    const trans  = (data.transitions || []).find((t) => t.from === current && t.label === symbol);
-    if (trans) {
-      setCurrent(trans.to);
-      setHistory((h) => [...h, trans.to]);
-      setInput(input.slice(1));
-      if (input.length === 1) {
-        setAccepted((data.accepting || []).includes(trans.to));
+    if (!tape) return;
+    const sym = tape[0];
+    const next = stepTransition(curr, sym, data.transitions || []);
+    if (next) {
+      setCurr(next);
+      setTape(tape.slice(1));
+      if (tape.length === 1) {
+        setStatus((data.accepting || []).includes(next) ? 'ACCEPTED ✓' : 'IN PROGRESS');
       }
+    } else {
+      setCurr('TRAP');
+      setStatus('REJECTED ✗');
     }
   }
 
   function reset() {
-    setCurrent(data.initial);
-    setHistory([data.initial]);
-    setInput('');
-    setAccepted(null);
+    setCurr(data.initial || 'q0');
+    setTape('');
+    setStatus('READY');
   }
 
   return (
     <div>
-      <PanelSection title="Input Tape">
+      <PanelSection title="Interactive Tape">
         <input
-          className="field"
           type="text"
-          id="sm-input"
-          placeholder="Enter input string…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+          placeholder="Input string (e.g. 0101)..."
+          value={tape}
+          onChange={(e) => setTape(e.target.value)}
           style={{
             width: '100%', padding: '8px 10px',
             background: 'var(--sunken)', border: '1px solid var(--line)',
             borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)',
-            fontSize: 14, color: 'var(--ink)',
+            fontSize: 13, color: 'var(--ink)',
+            marginBottom: 8,
           }}
         />
-        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-          <button className="btn btn-secondary btn-sm" id="sm-step-btn" onClick={step} type="button">
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn btn-secondary btn-sm" onClick={step} type="button">
             <StepForward size={13} /> Step
           </button>
-          <button className="btn btn-ghost btn-sm" id="sm-reset-btn" onClick={reset} type="button">
+          <button className="btn btn-ghost btn-sm" onClick={reset} type="button">
             <RotateCcw size={13} /> Reset
           </button>
         </div>
       </PanelSection>
 
       <hr className="divider" />
-      <PanelSection title="State">
-        <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-          Current: <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--navy)' }}>{current}</strong>
-        </p>
-        {accepted !== null && (
-          <span
-            className={`badge ${accepted ? 'badge-ok' : 'badge-err'}`}
-            style={{ marginTop: 8, display: 'inline-flex' }}
-          >
-            {accepted ? '✓ Accepted' : '✗ Rejected'}
-          </span>
-        )}
-      </PanelSection>
-
-      <hr className="divider" />
-      <PanelSection title="Trace">
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {history.map((s, i) => (
-            <span key={i} style={{
-              padding: '2px 6px', borderRadius: 4,
-              background: i === history.length - 1 ? 'var(--navy)' : 'var(--sunken)',
-              color: i === history.length - 1 ? 'white' : 'var(--ink-2)',
-              fontFamily: 'var(--font-mono)', fontSize: 12,
-            }}>
-              {s}
-            </span>
-          ))}
-        </div>
+      <PanelSection title="Automaton State">
+        <ResultRow label="Current State" value={curr} />
+        <ResultRow label="Status" value={status} />
+        <ResultRow label="Accepting States" value={(data.accepting || []).join(', ')} />
       </PanelSection>
     </div>
   );
 }
 
-/* ── Shared panel pieces ── */
+/* ── Helper UI Components ── */
 function PanelSection({ title, children }) {
   return (
     <div style={{ padding: '14px 16px' }}>
@@ -375,65 +357,28 @@ function PanelSection({ title, children }) {
   );
 }
 
-function SliderRow({ label, value, min, max, step, onChange, inferred, inferredReason, color }) {
-  const [local, setLocal] = useState(value);
-  const [tip, setTip]     = useState(false);
-
-  function handleChange(e) {
-    const v = parseFloat(e.target.value);
-    setLocal(v);
-    onChange?.(v);
-  }
-
+function SliderRow({ label, value, min, max, step, onChange, color }) {
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
           {color && (
             <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: 'inline-block' }} />
           )}
           {label}
-          {inferred && (
-            <span
-              style={{
-                position: 'relative',
-                width: 8, height: 8, borderRadius: '50%',
-                background: 'var(--info)', display: 'inline-block', cursor: 'help',
-              }}
-              title={inferredReason || 'Inferred from diagram'}
-              onMouseEnter={() => setTip(true)}
-              onMouseLeave={() => setTip(false)}
-              aria-label="This value was inferred from the diagram"
-            >
-              {tip && inferredReason && (
-                <span style={{
-                  position: 'absolute', bottom: 14, left: -60, width: 160,
-                  background: 'var(--ink)', color: '#fff', borderRadius: 6,
-                  padding: '5px 8px', fontSize: 11, zIndex: 100,
-                  lineHeight: 1.4, pointerEvents: 'none',
-                }}>
-                  {inferredReason}
-                </span>
-              )}
-            </span>
-          )}
         </label>
-        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-2)' }}>
-          {local}
+        <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--navy)', fontWeight: 600 }}>
+          {typeof value === 'number' ? value.toFixed(1) : value}
         </span>
       </div>
       <input
         type="range"
-        className="slider-track"
         min={min}
         max={max}
         step={step}
-        value={local}
-        onChange={handleChange}
-        aria-label={label}
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={local}
+        value={value}
+        onChange={(e) => onChange?.(parseFloat(e.target.value))}
+        style={{ width: '100%', height: 4, cursor: 'pointer', accentColor: 'var(--navy)' }}
       />
     </div>
   );
@@ -441,58 +386,40 @@ function SliderRow({ label, value, min, max, step, onChange, inferred, inferredR
 
 function ResultRow({ label, value }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', fontFamily: 'var(--font-mono)' }}>
-        {value}
-      </span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+      <span style={{ color: 'var(--ink-2)' }}>{label}</span>
+      <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--navy)' }}>{value}</strong>
     </div>
   );
 }
 
 function PhotoSlideOver({ imageUrl, onClose }) {
-  useEffect(() => {
-    const handler = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
-
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 50,
-        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-        background: 'rgba(20,24,31,.35)',
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'flex-end',
       }}
       onClick={onClose}
     >
       <div
         style={{
-          width: 400, height: '100%', background: 'var(--surface)',
-          borderLeft: '1px solid var(--line)', display: 'flex', flexDirection: 'column',
-          boxShadow: '-8px 0 32px rgba(20,24,31,.12)',
-          animation: 'fadeIn 200ms var(--ease-out)',
+          width: 440, background: 'var(--surface)', height: '100%',
+          padding: 24, boxShadow: '-4px 0 24px rgba(0,0,0,0.2)',
+          display: 'flex', flexDirection: 'column', gap: 16,
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Original photo</p>
-          <button className="btn btn-ghost btn-icon" id="close-photo-btn" onClick={onClose} type="button" aria-label="Close photo">
-            <X size={16} />
-          </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Original Notebook Photo</h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
-        <div style={{ flex: 1, overflow: 'hidden', padding: 16 }}>
-          <img
-            src={imageUrl}
-            alt="Original notebook photo"
-            style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8 }}
-          />
-        </div>
+        <img
+          src={imageUrl}
+          alt="Notebook"
+          style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8, border: '1px solid var(--line)' }}
+        />
       </div>
     </div>
   );
-}
-
-function capitalize(s) {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }

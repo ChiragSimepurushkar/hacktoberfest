@@ -1,13 +1,14 @@
 /**
- * Unit tests for Dev B simulation compilers against fixture JSON.
- * Run with: node test-compilers.js
+ * Comprehensive automated test suite for Track B (Dev B) compilers.
+ * Verifies freeBodyCompiler, circuitCompiler, and stateMachineCompiler
+ * against the official contract schemas and fixtures.
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { compileFreeBody, calculateDynamics } from './src/engines/freeBodyCompiler.js';
 import { compileCircuit, solveCircuit } from './src/engines/circuitCompiler.js';
-import { compileStateMachine, simulateStream, stepTransition } from './src/engines/stateMachineCompiler.js';
+import { compileStateMachine, stepTransition, simulateStream } from './src/engines/stateMachineCompiler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,7 +26,7 @@ console.log("==========================================");
 console.log("🧪 RUNNING TRACK B (DEV B) COMPILER TESTS");
 console.log("==========================================");
 
-// 1. Free-Body Diagram Tests
+// 1. Free-Body Compiler Tests
 const fbdData = JSON.parse(fs.readFileSync(path.join(root, 'fixtures', 'free_body.json'), 'utf8'));
 const fbdScene = compileFreeBody(fbdData);
 
@@ -38,16 +39,25 @@ const dyn = calculateDynamics(2.5, 30, 0.3, fbdScene.forces);
 assert(typeof dyn.acceleration === "number", "calculateDynamics computes acceleration");
 assert(typeof dyn.netForce === "number", "calculateDynamics computes net force");
 
-// 2. Circuit Solver Tests
+// 2. Circuit Solver Tests (Series-Parallel & Series)
 const cktData = JSON.parse(fs.readFileSync(path.join(root, 'fixtures', 'circuit.json'), 'utf8'));
 const cktScene = compileCircuit(cktData);
 
 assert(cktScene.engine === "circuit", "Circuit compiler identifies engine as 'circuit'");
-assert(cktScene.nodes.length >= 3, "Circuit compiler identifies nodes A, B, C");
-assert(cktScene.solution.equivalentResistance === 550, "Circuit solver computes Req = 550 ohms (220 + 330)");
-assert(Math.abs(cktScene.solution.currentMilliAmps - 16.36) < 0.1, "Circuit solver computes Current ≈ 16.36 mA");
-assert(cktScene.solution.nodeVoltages["B"] === 9.0, "Node B voltage is 9V (battery)");
-assert(cktScene.solution.nodeVoltages["A"] === 0.0, "Node A voltage is 0V (GND)");
+assert(cktScene.nodes.length >= 3, "Circuit compiler identifies nodes GND, N1, N2");
+assert(Math.abs(cktScene.solution.equivalentResistance - 4.4) < 0.01, "Circuit solver computes Req = 4.4 ohms (2 + 2.4)");
+assert(Math.abs(cktScene.solution.currentAmps - 2.27) < 0.02, "Circuit solver computes Current ≈ 2.27 A");
+assert(Math.abs(cktScene.solution.nodeVoltages["N2"] - 5.45) < 0.05, "Node N2 parallel voltage is ≈ 5.46V");
+
+// Test pure series solver backwards compatibility
+const seriesComps = [
+  { type: "battery", value: 9.0, label: "V1", node_a: "A", node_b: "B" },
+  { type: "resistor", value: 220, label: "R1", node_a: "B", node_b: "C" },
+  { type: "resistor", value: 330, label: "R2", node_a: "C", node_b: "A" },
+];
+const seriesSol = solveCircuit(seriesComps, "V1");
+assert(seriesSol.equivalentResistance === 550, "Pure series solver computes Req = 550 ohms (220 + 330)");
+assert(Math.abs(seriesSol.currentMilliAmps - 16.36) < 0.1, "Pure series solver computes Current ≈ 16.36 mA");
 
 // 3. State Machine Tests
 const smData = JSON.parse(fs.readFileSync(path.join(root, 'fixtures', 'state_machine.json'), 'utf8'));
