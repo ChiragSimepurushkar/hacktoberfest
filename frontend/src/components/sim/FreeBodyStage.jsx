@@ -11,7 +11,9 @@ const VECTOR_COLORS = {
 
 /**
  * Free-body diagram stage.
- * Renders an accurate, interactive physics representation of the block on an incline wedge,
+ * Renders an accurate, interactive physics representation of the block on either:
+ *   a) an incline wedge (when angle > 0)
+ *   b) a flat horizontal surface (when angle == 0)
  * with vector force arrows, dynamic telemetry HUD, and non-overlapping label badges.
  */
 export default function FreeBodyStage({ data }) {
@@ -31,10 +33,14 @@ export default function FreeBodyStage({ data }) {
     return () => ro.disconnect();
   }, []);
 
-  const thetaDeg = scene.inclineAngleDeg || 30;
+  // Correct angle resolution (never force 0 to become 30!)
+  const thetaDeg = typeof scene.inclineAngleDeg === 'number'
+    ? scene.inclineAngleDeg
+    : (typeof data?.incline_angle === 'number' ? data.incline_angle : 0);
   const thetaRad = (thetaDeg * Math.PI) / 180;
+  const isInclined = thetaDeg > 0;
 
-  // Wedge geometry
+  // Wedge / Ground Geometry
   const ox = Math.max(50, size.w * 0.12);
   const oy = Math.min(size.h - 60, 360);
   const rampLen = Math.min(size.w * 0.65, 380);
@@ -42,24 +48,26 @@ export default function FreeBodyStage({ data }) {
   const topX = ox + rampLen * Math.cos(thetaRad);
   const topY = oy - rampLen * Math.sin(thetaRad);
 
-  // Block dimensions & position on incline
+  // Block dimensions & center position
   const blockW = 84;
   const blockH = 54;
-  const blockDist = rampLen * 0.52; // midway along the ramp
 
-  // Point on the ramp surface
-  const surfaceX = ox + blockDist * Math.cos(thetaRad);
-  const surfaceY = oy - blockDist * Math.sin(thetaRad);
+  let blockCx, blockCy;
+  if (isInclined) {
+    const blockDist = rampLen * 0.52;
+    const surfaceX = ox + blockDist * Math.cos(thetaRad);
+    const surfaceY = oy - blockDist * Math.sin(thetaRad);
+    const perpX = -Math.sin(thetaRad);
+    const perpY = -Math.cos(thetaRad);
+    blockCx = surfaceX + (blockH / 2) * perpX;
+    blockCy = surfaceY + (blockH / 2) * perpY;
+  } else {
+    // Horizontal surface: center block on horizontal ground line
+    blockCx = size.w / 2;
+    blockCy = oy - blockH / 2;
+  }
 
-  // Perpendicular vector pointing outward from the ramp surface (up-left)
-  const perpX = -Math.sin(thetaRad);
-  const perpY = -Math.cos(thetaRad);
-
-  // Center of the block sitting on top of the surface
-  const blockCx = surfaceX + (blockH / 2) * perpX;
-  const blockCy = surfaceY + (blockH / 2) * perpY;
-
-  // Arc path for angle
+  // Arc path for incline angle
   const arcRadius = 45;
   const arcEndX = ox + arcRadius * Math.cos(thetaRad);
   const arcEndY = oy - arcRadius * Math.sin(thetaRad);
@@ -73,7 +81,7 @@ export default function FreeBodyStage({ data }) {
         height="100%"
         viewBox={`0 0 ${size.w} ${size.h}`}
         style={{ position: 'absolute', inset: 0, display: 'block' }}
-        aria-label={`Free-body diagram: block of ${scene.mass}kg on a ${thetaDeg} degree incline`}
+        aria-label={`Free-body diagram: block of ${scene.mass}kg ${isInclined ? `on a ${thetaDeg}° incline` : 'on a horizontal surface'}`}
       >
         <defs>
           {/* Arrow markers for each force color */}
@@ -97,40 +105,82 @@ export default function FreeBodyStage({ data }) {
           </filter>
         </defs>
 
-        {/* 1. Ground baseline */}
-        <line
-          x1={ox - 30}
-          y1={oy}
-          x2={ox + rampLen + 60}
-          y2={oy}
-          stroke="#94a3b8"
-          strokeWidth="1.5"
-          strokeDasharray="6,4"
-        />
+        {/* ── 1. Ground / Incline Surface ── */}
+        {isInclined ? (
+          <g>
+            {/* Ground baseline */}
+            <line
+              x1={ox - 30}
+              y1={oy}
+              x2={ox + rampLen + 60}
+              y2={oy}
+              stroke="#94a3b8"
+              strokeWidth="1.5"
+              strokeDasharray="6,4"
+            />
 
-        {/* 2. Incline Wedge Triangle */}
-        <path
-          d={`M ${ox} ${oy} L ${topX} ${topY} L ${topX} ${oy} Z`}
-          fill="#f8fafc"
-          stroke="#1e293b"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-        />
+            {/* Incline Wedge Triangle */}
+            <path
+              d={`M ${ox} ${oy} L ${topX} ${topY} L ${topX} ${oy} Z`}
+              fill="#f8fafc"
+              stroke="#1e293b"
+              strokeWidth="2.5"
+              strokeLinejoin="round"
+            />
 
-        {/* Angle Arc & Label */}
-        <path d={arcPath} fill="none" stroke="#d97706" strokeWidth="2" />
-        <text
-          x={ox + arcRadius + 8}
-          y={oy - 10}
-          fill="#d97706"
-          fontSize="13"
-          fontFamily="var(--font-mono, monospace)"
-          fontWeight="700"
-        >
-          {thetaDeg}°
-        </text>
+            {/* Angle Arc & Label */}
+            <path d={arcPath} fill="none" stroke="#d97706" strokeWidth="2" />
+            <text
+              x={ox + arcRadius + 8}
+              y={oy - 10}
+              fill="#d97706"
+              fontSize="13"
+              fontFamily="var(--font-mono, monospace)"
+              fontWeight="700"
+            >
+              {thetaDeg}°
+            </text>
+          </g>
+        ) : (
+          <g>
+            {/* Horizontal Surface line */}
+            <line
+              x1={size.w * 0.15}
+              y1={oy}
+              x2={size.w * 0.85}
+              y2={oy}
+              stroke="#1e293b"
+              strokeWidth="3"
+            />
+            {/* Ground hatching ticks underneath */}
+            {Array.from({ length: 18 }).map((_, i) => {
+              const hx = size.w * 0.18 + i * 22;
+              return (
+                <line
+                  key={i}
+                  x1={hx}
+                  y1={oy}
+                  x2={hx - 10}
+                  y2={oy + 12}
+                  stroke="#94a3b8"
+                  strokeWidth="1.5"
+                />
+              );
+            })}
+            <text
+              x={size.w * 0.86}
+              y={oy - 8}
+              fill="#64748b"
+              fontSize="11"
+              fontFamily="var(--font-mono, monospace)"
+              fontWeight="600"
+            >
+              Horizontal Surface (0°)
+            </text>
+          </g>
+        )}
 
-        {/* 3. Block on the incline (rotated by -thetaDeg) */}
+        {/* ── 2. Block sitting on surface ── */}
         <g transform={`translate(${blockCx}, ${blockCy}) rotate(${-thetaDeg})`}>
           <rect
             x={-blockW / 2}
@@ -143,10 +193,10 @@ export default function FreeBodyStage({ data }) {
             strokeWidth="2"
             style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
           />
-          {/* Diagonal hatch lines inside block for notebook aesthetic */}
+          {/* Notebook hatch lines inside block */}
           <line x1={-blockW / 2 + 10} y1={-blockH / 2} x2={-blockW / 2} y2={-blockH / 2 + 10} stroke="#bae6fd" strokeWidth="1.5" />
           <line x1={-blockW / 2 + 25} y1={-blockH / 2} x2={-blockW / 2} y2={-blockH / 2 + 25} stroke="#bae6fd" strokeWidth="1.5" />
-          
+
           <text
             x="0"
             y="4"
@@ -160,29 +210,24 @@ export default function FreeBodyStage({ data }) {
           </text>
         </g>
 
-        {/* 4. Force Vectors & Smart Non-Overlapping Badges */}
+        {/* ── 3. Force Vectors & Badges ── */}
         {scene.forces.map((force, i) => {
           const color = VECTOR_COLORS[force.label] || VECTOR_COLORS.net;
           const markerName = Object.keys(VECTOR_COLORS).find((k) => k === force.label) || 'net';
 
-          // Determine start anchor on the block
-          let startX = blockCx;
-          let startY = blockCy;
+          const startX = blockCx;
+          const startY = blockCy;
 
-          // Standard vector length based on force magnitude (clamped for visual clarity)
           const arrowLen = Math.max(65, Math.min(force.magnitude * 4.2, 115));
           const rad = force.angleRad;
 
-          // Tip of the vector arrow
           const tipX = startX + arrowLen * Math.cos(rad);
-          const tipY = startY - arrowLen * Math.sin(rad); // SVG Y-axis inverted
+          const tipY = startY - arrowLen * Math.sin(rad);
 
-          // Badge placement slightly past the arrow tip along the vector
           const badgeOffset = 26;
           const badgeX = tipX + badgeOffset * Math.cos(rad);
           const badgeY = tipY - badgeOffset * Math.sin(rad);
 
-          // Force label formatting
           let displaySymbol = force.label.toUpperCase();
           if (force.label === 'gravity') displaySymbol = 'mg';
           else if (force.label === 'normal') displaySymbol = 'N';
@@ -195,7 +240,6 @@ export default function FreeBodyStage({ data }) {
 
           return (
             <g key={`force-${i}-${force.label}`}>
-              {/* Vector arrow line */}
               <line
                 x1={startX}
                 y1={startY}
@@ -207,7 +251,6 @@ export default function FreeBodyStage({ data }) {
                 markerEnd={`url(#arrow-${markerName})`}
               />
 
-              {/* Clean non-overlapping badge pill */}
               <g transform={`translate(${badgeX}, ${badgeY})`}>
                 <rect
                   x={-badgeWidth / 2}
@@ -269,8 +312,8 @@ export default function FreeBodyStage({ data }) {
           </strong>
         </div>
         <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
-          <span style={{ color: '#64748b' }}>Incline: </span>
-          <strong style={{ color: '#d97706' }}>{thetaDeg}°</strong>
+          <span style={{ color: '#64748b' }}>Surface: </span>
+          <strong style={{ color: '#d97706' }}>{isInclined ? `${thetaDeg}° Incline` : '0° Flat'}</strong>
         </div>
       </div>
     </div>

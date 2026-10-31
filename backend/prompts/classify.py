@@ -3,14 +3,14 @@
 VALID_TYPES = {"free_body", "circuit", "state_machine"}
 
 CLASSIFY_PROMPT = """\
-You are analyzing a photo of a handwritten notebook page.
+You are an expert engineer analyzing a photo of a student's handwritten notebook page or technical diagram.
 Classify it into exactly one of: free_body, circuit, state_machine, unsupported.
 
-Rules:
-- free_body: forces drawn as arrows acting on an object, a mass, a surface.
-- circuit: resistors, batteries, switches, wires, nodes.
-- state_machine: labeled circles/nodes connected by arrows with transition labels.
-- unsupported: anything else.
+Classification Guidelines:
+- free_body: Any physics mechanics diagram with forces, vector arrows, a mass/block/box, an incline/ramp/surface, tension, gravity (mg), normal force (N), or friction (f).
+- circuit: Any electrical/electronic schematic with resistors, capacitors, inductors, batteries, DC/AC voltage sources, ground (GND), wires, or nodes.
+- state_machine: Any finite automata, DFA, NFA, state transition diagram, or flowchart with circled states and labeled arrows.
+- unsupported: Only if it is completely unrelated to physics, circuits, or automata.
 
-Respond with only the category name, nothing else.
+Output only one word: free_body, circuit, or state_machine.
 """

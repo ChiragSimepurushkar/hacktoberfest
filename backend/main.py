@@ -58,11 +58,13 @@ def chat(req: ChatRequest):
 @app.post("/extract")
 async def extract(image: UploadFile = File(...)):
     image_bytes = await image.read()
+    print(f"\n[POST /extract] Received image of {len(image_bytes)} bytes ({image.filename})")
 
     # 1. Classify
     diagram_type = classify_image(image_bytes)
+    print(f"[POST /extract] Detected diagram_type: {diagram_type}")
     if diagram_type not in _SCHEMA_MAP:
-        return {"status": "unsupported", "message": "No recognised diagram type found."}
+        return {"status": "unsupported", "message": f"No recognised diagram type found (detected: {diagram_type})."}
 
     # 2. Get schema for this type
     model_cls = _SCHEMA_MAP[diagram_type]
@@ -71,9 +73,11 @@ async def extract(image: UploadFile = File(...)):
     # 3. Extract + validate with self-repair retry
     last_error = ""
     for attempt in range(MAX_RETRIES + 1):
-        raw = extract_diagram(diagram_type, image_bytes, schema_json, error_feedback=last_error)
+        print(f"[POST /extract] Extraction attempt {attempt + 1}/{MAX_RETRIES + 1}...")
         try:
+            raw = extract_diagram(diagram_type, image_bytes, schema_json, error_feedback=last_error)
             validated = model_cls.model_validate(raw)
+            print(f"[POST /extract] Successfully validated {diagram_type}!")
             return {
                 "status": "ok",
                 "diagram_type": diagram_type,
@@ -81,6 +85,7 @@ async def extract(image: UploadFile = File(...)):
             }
         except Exception as exc:
             last_error = str(exc)
+            print(f"[POST /extract] Attempt {attempt + 1} validation failed: {last_error}")
 
     return {
         "status": "error",

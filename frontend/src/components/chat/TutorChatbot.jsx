@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, MessageSquare } from 'lucide-react';
+import { Send, Bot, User, Sparkles } from 'lucide-react';
 
 /**
  * Strips all Markdown syntax so chatbot output is plain readable text.
  * Removes: ##/### headers, **bold**, *italic*, `code`, - bullet dashes,
- * numbered list prefixes, and extra blank lines.
+ * numbered list prefixes, LaTeX syntax, and extra blank lines.
  */
 function stripMarkdown(text) {
   if (typeof text !== 'string') return '';
@@ -21,52 +21,110 @@ function stripMarkdown(text) {
     .trim();
 }
 
-const SUGGESTED_PROMPTS = {
-  circuit: [
-    'Why is Req = 4.4 Ω instead of 12 Ω?',
-    'How does the 2.27 A current split between R2 and R3?',
-    'What happens to total current if R2 is doubled to 8 Ω?',
-    'Check if the student made any errors in their working.',
-  ],
-  free_body: [
-    'Why did the student write f = 8 N when μ·N = 5.1 N?',
-    'Explain why normal force is perpendicular to the 30° ramp.',
-    'What minimum angle would cause the block to slide on its own?',
-    'Why is net force negative (-7.8 N)?',
-  ],
-  state_machine: [
-    'Why is the string "01" accepted while "00" is rejected?',
-    'What regular expression or language does this DFA recognize?',
-    'Explain the role of the accepting state q2.',
-  ],
-};
+/**
+ * Generates dynamic, contextual suggested prompt chips tailored to the
+ * ACTIVE diagram data rather than static example values.
+ */
+function getContextualPrompts(diagramType, data) {
+  if (diagramType === 'free_body') {
+    const mass = data?.mass ?? 2;
+    const angle = data?.incline_angle ?? data?.surface_angle ?? 30;
+    return [
+      `How is the net force computed for this ${mass} kg mass?`,
+      angle > 0
+        ? `Why is the normal force perpendicular to the ${angle}° incline?`
+        : 'What is the normal force on this horizontal surface?',
+      'Check if there are any errors or inconsistencies in this diagram.',
+      'What acceleration will this object experience under these forces?',
+    ];
+  }
 
-const LOCAL_FALLBACKS = {
-  'Why is Req = 4.4 Ω instead of 12 Ω?':
-    'R2 (4 Ω) and R3 (6 Ω) are connected in parallel, not in series.\n\nTheir combined parallel resistance: 1/Rp = 1/4 + 1/6 = 5/12, so Rp = 2.4 Ω.\n\nThen R1 (2 Ω) is in series with this parallel bank: Req = R1 + Rp = 2 + 2.4 = 4.4 Ω.\n\nIf all three were in series you would get 2 + 4 + 6 = 12 Ω, but parallel branches always reduce equivalent resistance.',
+  if (diagramType === 'circuit') {
+    const comps = data?.components || [];
+    const battery = comps.find((c) => c.type === 'battery');
+    const resistors = comps.filter((c) => c.type === 'resistor');
+    const vsVal = battery?.value ?? 10;
+    const rNames = resistors.map((r) => r.label || 'R').slice(0, 3).join(', ');
 
-  'How does the 2.27 A current split between R2 and R3?':
-    'The total current from the 10 V source is I = V / Req = 10 / 4.4 = 2.27 A.\n\nThis entire 2.27 A flows through R1, causing a voltage drop of V1 = 2.27 x 2 = 4.54 V.\n\nThe remaining voltage across the parallel junction is Vp = 10 - 4.54 = 5.46 V.\n\nCurrent splits inversely proportional to resistance.\nThrough R2 (4 Ω): I2 = 5.46 / 4 = 1.365 A\nThrough R3 (6 Ω): I3 = 5.46 / 6 = 0.910 A\n\nCheck: 1.365 + 0.91 = 2.275 A, which equals the total current. Kirchhoff\'s Current Law is satisfied.',
+    return [
+      'How is the equivalent resistance calculated for this circuit?',
+      resistors.length > 1
+        ? `How does the current divide across ${rNames}?`
+        : `What current flows from the ${vsVal}V voltage source?`,
+      'Check if the student made any errors in their circuit calculations.',
+      'What happens to total current if one resistor value is doubled?',
+    ];
+  }
 
-  'Why did the student write f = 8 N when μ·N = 5.1 N?':
-    'Great observation. The student made a conceptual error in their handwritten calculation.\n\nThe diagram specifies an external applied friction value labeled f = 8 N.\nHowever, the student calculated: N = mg cos(30°) = 2 x 9.8 x 0.866 = 16.98 ≈ 17 N\nAnd maximum friction: f_max = mu x N = 0.3 x 17 = 5.1 N\n\nBut in the net force step they used f = 8 N instead of 5.1 N.\n\nThe physical maximum static friction is 5.1 N, so friction cannot exceed that value. The student likely copied the given applied force (8 N) as the friction instead of computing it from mu x N.',
+  if (diagramType === 'state_machine') {
+    const states = data?.states || ['q0', 'q1'];
+    const acc = (data?.accepting || []).join(', ') || 'accepting states';
+    const init = data?.initial || states[0];
+    return [
+      `What language or sequence does this ${states.length}-state automaton recognize?`,
+      `Explain the role of accepting state(s) ${acc}.`,
+      `Walk through the transitions starting from ${init}.`,
+      'Can any input string cause this machine to reject or halt?',
+    ];
+  }
 
-  'Why is the string "01" accepted while "00" is rejected?':
-    'Let us trace the DFA step-by-step from initial state q0.\n\nString "01":\nStart at q0. Read 0: transition q0 --> q1. Read 1: transition q1 --> q2. String ends at q2 which is an accepting state (double circle). Result: ACCEPTED.\n\nString "00":\nStart at q0. Read 0: transition q0 --> q1. Read 0: from q1 there is no transition on symbol 0. The automaton halts in the trap reject state. Result: REJECTED.',
-};
+  return [
+    'Explain the governing equations for this diagram.',
+    'Check if there are any errors or inconsistencies in this diagram.',
+  ];
+}
+
+/**
+ * Dynamic educational fallback tailored to active diagram parameters.
+ */
+function buildContextualFallback(diagramType, data, question) {
+  if (diagramType === 'free_body') {
+    const m = data?.mass ?? 2;
+    const angle = data?.incline_angle ?? data?.surface_angle ?? 30;
+    return stripMarkdown(`For this free-body diagram with a ${m} kg mass at an angle of ${angle} degrees:
+Normal force is calculated as N = m * g * cos(theta), where gravity acts straight down at 90 degrees to horizontal.
+Friction acts along the surface opposing relative motion, with maximum static friction given by f_max = mu * N.
+Net force along the surface is the vector sum of applied forces, friction, and the gravity component m * g * sin(theta).
+Acceleration is then a = F_net / m.`);
+  }
+
+  if (diagramType === 'circuit') {
+    const comps = data?.components || [];
+    const battery = comps.find((c) => c.type === 'battery');
+    const vs = battery?.value ?? 10;
+    return stripMarkdown(`For this DC circuit with a ${vs}V source:
+Ohm's Law governs each branch: V = I * R.
+Kirchhoff's Current Law (KCL) ensures total current entering any node equals total current leaving.
+In series branches, current is identical and voltages add.
+In parallel branches, voltage across each branch is identical and currents divide inversely to branch resistances.`);
+  }
+
+  if (diagramType === 'state_machine') {
+    const states = (data?.states || []).join(', ');
+    const init = data?.initial || 'initial state';
+    const acc = (data?.accepting || []).join(', ');
+    return stripMarkdown(`This finite state automaton operates over states ${states}.
+Execution starts at ${init}.
+For each input symbol read, the transition function moves the machine to the designated next state.
+A string is accepted if and only if execution terminates in one of the accepting states: ${acc}.`);
+  }
+
+  return 'The diagram follows standard governing equations. Review the telemetry cards above for exact numerical values.';
+}
 
 export default function TutorChatbot({ diagramType, extractedData }) {
   const [messages, setMessages] = useState([
     {
       sender: 'gemma',
-      text: stripMarkdown(`Hello! I am your Gemma 4 Lab Tutor. I have analyzed this ${diagramType?.replace('_', ' ')} diagram. You can ask me any question about the formulas, verify the student handwritten steps, or explore what happens if values change!`),
+      text: stripMarkdown(`Hello! I am your Gemma 4 Lab Tutor. I have analyzed your ${diagramType?.replace('_', ' ')} diagram. You can ask me any question about the formulas, verify your calculations, or explore what happens when values change!`),
     },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const prompts = SUGGESTED_PROMPTS[diagramType] || SUGGESTED_PROMPTS.circuit;
+  // Dynamic suggested prompts based on actual diagram data
+  const prompts = getContextualPrompts(diagramType, extractedData);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -101,15 +159,11 @@ export default function TutorChatbot({ diagramType, extractedData }) {
       }
       throw new Error('API offline');
     } catch (err) {
-      // Use intelligent educational fallback
-      const fallback =
-        LOCAL_FALLBACKS[q] ||
-        `Based on this ${diagramType?.replace('_', ' ')} diagram, the solution uses deterministic governing equations. For this question, review the equilibrium and nodal conditions shown in the analysis cards above.`;
-
+      const fallback = buildContextualFallback(diagramType, extractedData, q);
       setTimeout(() => {
-        setMessages((prev) => [...prev, { sender: 'gemma', text: stripMarkdown(fallback) }]);
+        setMessages((prev) => [...prev, { sender: 'gemma', text: fallback }]);
         setLoading(false);
-      }, 500);
+      }, 400);
     }
   }
 
@@ -151,7 +205,7 @@ export default function TutorChatbot({ diagramType, extractedData }) {
               Gemma 4 Lab Tutor
             </div>
             <div style={{ fontSize: 11, color: '#93c5fd', opacity: 0.9 }}>
-              Ask anything about calculations, concepts, or handwritten errors
+              Ask anything about your diagram, calculations, or concepts
             </div>
           </div>
         </div>
@@ -170,7 +224,7 @@ export default function TutorChatbot({ diagramType, extractedData }) {
         </span>
       </div>
 
-      {/* Suggested Prompt Chips */}
+      {/* Dynamic Suggested Prompt Chips */}
       <div
         style={{
           padding: '10px 16px',
@@ -320,7 +374,7 @@ export default function TutorChatbot({ diagramType, extractedData }) {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question about this diagram or calculation..."
+          placeholder="Ask a question about your diagram or calculation..."
           style={{
             flex: 1,
             padding: '9px 14px',

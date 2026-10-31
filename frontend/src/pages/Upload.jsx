@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CloudUpload, Camera, RotateCcw, ArrowRight, Atom, Zap, GitBranch } from 'lucide-react';
 import { useRunStore } from '../store/run.js';
@@ -56,8 +56,27 @@ export default function Upload() {
   }, []);
 
   const handlePaste = useCallback((e) => {
-    const item = Array.from(e.clipboardData.items).find((i) => i.kind === 'file');
+    const item = Array.from(e.clipboardData.items).find((i) => i.kind === 'file' || (i.type && i.type.startsWith('image/')));
     if (item) processFile(item.getAsFile());
+  }, []);
+
+  // Global window paste listener so Ctrl+V works anywhere on the screen
+  useEffect(() => {
+    function onGlobalPaste(e) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            processFile(file);
+            break;
+          }
+        }
+      }
+    }
+    window.addEventListener('paste', onGlobalPaste);
+    return () => window.removeEventListener('paste', onGlobalPaste);
   }, []);
 
   function handleAnalyze() {

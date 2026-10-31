@@ -39,6 +39,22 @@ export default function StateMachineStage({ data, onParamChange }) {
   const [panelMode,  setPanelMode]  = useState('sim'); // 'sim' | 'edit'
   const [editorMsg,  setEditorMsg]  = useState('');
 
+  // Sync DFA when data prop changes from upload / example change
+  useEffect(() => {
+    if (data?.states && data.states.length > 0) {
+      const init = data.initial || data.states[0];
+      setDfa({
+        states:      data.states,
+        initial:     init,
+        accepting:   data.accepting || [],
+        transitions: data.transitions || [],
+      });
+      setCurrent(init);
+      setTrace([init]);
+      setStatus('READY');
+    }
+  }, [data]);
+
   // ── Build Cytoscape elements from current DFA ──
   function buildElements(dfaData) {
     const nodes = (dfaData.states || []).map((id) => ({ data: { id } }));
