@@ -3,6 +3,7 @@
  * Maps validated JSON → Physics scene configuration & mathematical dynamics.
  * Fed into FreeBodyRenderer which drives the live interactive canvas.
  */
+import { canonicalForceKey } from "../lib/forceLabels.js";
 
 /**
  * Computes net force, normal force, friction, and acceleration along the surface.
@@ -16,10 +17,11 @@ export function calculateDynamics(mass, inclineAngleDeg, frictionCoeff, forces) 
   const g = 9.81;
   const thetaRad = (inclineAngleDeg * Math.PI) / 180;
 
-  // Find components
-  const gravityForce = forces.find((f) => f.label.toLowerCase() === "gravity")?.magnitude || mass * g;
-  const normalForce = forces.find((f) => f.label.toLowerCase() === "normal")?.magnitude || mass * g * Math.cos(thetaRad);
-  const appliedForce = forces.find((f) => f.label.toLowerCase() === "applied")?.magnitude || 0;
+  // Find components. Labels may be canonical ("gravity") or copied straight
+  // from the handwriting ("mg", "N", "F") — canonicalForceKey normalizes both.
+  const gravityForce = forces.find((f) => canonicalForceKey(f.label) === "gravity")?.magnitude || mass * g;
+  const normalForce = forces.find((f) => canonicalForceKey(f.label) === "normal")?.magnitude || mass * g * Math.cos(thetaRad);
+  const appliedForce = forces.find((f) => canonicalForceKey(f.label) === "applied")?.magnitude || 0;
 
   // Theoretical forces along incline
   const F_g_parallel = mass * g * Math.sin(thetaRad);
@@ -67,8 +69,19 @@ export function calculateDynamics(mass, inclineAngleDeg, frictionCoeff, forces) 
 export function compileFreeBody(data) {
   const mass = data.mass || 2.5;
   const surface = data.surface || "incline";
-  const inclineAngleDeg = surface === "incline" ? 30 : 0;
   const frictionCoeff = typeof data.friction_coeff === "number" ? data.friction_coeff : 0.3;
+
+  // The schema has no explicit incline-angle field, but the normal force's
+  // angle encodes it: a surface rising at angle theta has its normal at
+  // 90+theta. Derive from that instead of assuming every incline is 30 deg.
+  const normalForce = (data.forces || []).find(
+    (f) => canonicalForceKey(f.label) === "normal"
+  );
+  const inferredAngle = normalForce ? Math.round(normalForce.angle - 90) : null;
+  const inclineAngleDeg =
+    surface === "incline"
+      ? (inferredAngle != null && inferredAngle > 0 && inferredAngle < 90 ? inferredAngle : 30)
+      : 0;
 
   const forces = (data.forces || []).map((f) => ({
     label: f.label || "force",
@@ -80,8 +93,24 @@ export function compileFreeBody(data) {
 
   const initialDynamics = calculateDynamics(mass, inclineAngleDeg, frictionCoeff, forces);
 
+  // Net force actually along the surface — the sum of every extracted
+  // force's component in the "up the slope" direction (angle = inclineAngleDeg,
+  // same convention the backend already uses: 0 = flat/rightward). This is
+  // what both the Results panel and the slide animation drive off of; it's
+  // distinct from calculateDynamics' friction-limited static-equilibrium
+  // model above, which assumes ideal friction rather than trusting whatever
+  // the diagram's own forces say.
+  const slopeRad = (inclineAngleDeg * Math.PI) / 180;
+  const netAlongSurface = forces.reduce(
+    (sum, f) => sum + f.magnitude * Math.cos(f.angleRad - slopeRad),
+    0
+  );
+  const accelerationAlongSurface = mass > 0 ? netAlongSurface / mass : 0;
+
   return {
     engine: "free_body",
+    netAlongSurface,
+    accelerationAlongSurface,
     surface,
     mass,
     frictionCoeff,

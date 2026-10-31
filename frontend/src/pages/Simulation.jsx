@@ -191,11 +191,10 @@ function FreeBodyPanel({ data, onChange }) {
   const mass   = data.mass   || 0;
   const mu     = data.friction_coeff || 0;
 
-  // Compute results
-  const netX = forces.reduce((sum, f) => sum + f.magnitude * Math.cos((f.angle * Math.PI) / 180), 0);
-  const netY = forces.reduce((sum, f) => sum + f.magnitude * Math.sin((f.angle * Math.PI) / 180), 0);
-  const netF = Math.sqrt(netX ** 2 + netY ** 2);
-  const accel = mass > 0 ? netF / mass : 0;
+  // Same projection the Play animation uses, so the two never disagree.
+  const scene = compileFreeBody(data);
+  const netF  = scene.netAlongSurface;
+  const accel = scene.accelerationAlongSurface;
 
   return (
     <div>
