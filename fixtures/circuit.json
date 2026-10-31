@@ -1,16 +1,19 @@
 {
   "components": [
-    { "type": "battery",  "value": 9,   "node_a": "A", "node_b": "B", "label": "V1" },
-    { "type": "resistor", "value": 220, "node_a": "B", "node_b": "C", "label": "R1" },
-    { "type": "resistor", "value": 330, "node_a": "C", "node_b": "A", "label": "R2" }
+    { "type": "battery",  "value": 10, "node_a": "GND", "node_b": "N1", "label": "V1" },
+    { "type": "resistor", "value": 2,  "node_a": "N1",  "node_b": "N2", "label": "R1" },
+    { "type": "resistor", "value": 4,  "node_a": "N2",  "node_b": "GND", "label": "R2" },
+    { "type": "resistor", "value": 6,  "node_a": "N2",  "node_b": "GND", "label": "R3" }
   ],
   "source": "V1",
   "audit": {
-    "concept_explanation": "Series resistor network driven by a 9V battery. Total R = 550 Ω, I ≈ 16.4 mA.",
+    "concept_explanation": "Series-parallel circuit with a 10V DC source. R1 (2 Ω) is connected in series with the parallel pair R2 (4 Ω) and R3 (6 Ω). Equivalent resistance Req = R1 + (R2·R3)/(R2+R3) = 2 + 2.4 = 4.4 Ω. Total current from source I = 10 / 4.4 = 2.27 A.",
     "detected_issues": [],
     "inference_trace": [
-      { "field": "components[1].value", "source": "read_directly", "reasoning": "220 labeled next to resistor symbol." },
-      { "field": "components[2].value", "source": "read_directly", "reasoning": "330 labeled next to resistor symbol." }
+      { "field": "components[0].value", "source": "read_directly", "reasoning": "DC voltage source 10V extracted from circle label." },
+      { "field": "components[1].value", "source": "read_directly", "reasoning": "R1 = 2 Ω extracted from series resistor label." },
+      { "field": "components[2].value", "source": "read_directly", "reasoning": "R2 = 4 Ω extracted from first parallel branch." },
+      { "field": "components[3].value", "source": "read_directly", "reasoning": "R3 = 6 Ω extracted from second parallel branch." }
     ]
   }
 }

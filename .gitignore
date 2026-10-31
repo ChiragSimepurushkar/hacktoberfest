@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.env
+venv/
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.env.local
+
+# General
+.DS_Store
+*.log
+.idea/
+.vscode/
+.serena/
