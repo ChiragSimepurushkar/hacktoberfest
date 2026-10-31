@@ -12,8 +12,11 @@ Rules:
   relative arrow length and state the assumptions used in inference_trace.
 - If the image is ambiguous or illegible, return the field
   "needs_clarification" with a short description instead of guessing.
-- Always populate the audit block.
 - surface is one of: "flat", "incline", "none" (or a brief description).
+- Audit block requirements:
+  * concept_explanation: Concise description of the physical system, forces acting, and expected motion.
+  * detected_issues: Check Newton's second law and equilibrium. If forces do not balance for a static scenario, or normal force doesn't match mg*cos(theta) on an incline, flag it with severity ("error"|"warning"|"info"), location, issue, and suggested_fix.
+  * inference_trace: For any force, angle, or mass whose value was estimated rather than read from explicit text, add an entry with field, source="inferred", and detailed reasoning. For explicit labels, use source="read_directly".
 
 Few-shot examples:
 

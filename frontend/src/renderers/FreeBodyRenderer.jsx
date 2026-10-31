@@ -33,7 +33,9 @@ export default function FreeBodyRenderer({ data }) {
 
       {/* Force sliders */}
       {forces.map((f, i) => {
-        const traceEntry = data.audit.inference_trace.find((t) => t.field === `forces[${i}].magnitude`);
+        const traceEntry = data?.audit?.inference_trace?.find(
+          (t) => t.field === `forces[${i}].magnitude` || (f.label && t.field.includes(f.label))
+        );
         return (
           <ParamSlider
             key={f.label}
@@ -44,6 +46,7 @@ export default function FreeBodyRenderer({ data }) {
             step={0.5}
             onChange={(v) => updateForce(i, v)}
             inferred={traceEntry?.source === "inferred"}
+            reasoning={traceEntry?.reasoning || ""}
           />
         );
       })}

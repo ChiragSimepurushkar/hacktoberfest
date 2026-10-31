@@ -10,8 +10,11 @@ Rules:
 - Assign sequential node labels (A, B, C, ...) to junction points.
 - Read component values directly from labels where visible.
 - If a value is missing or ambiguous, flag it in inference_trace with source "inferred".
-- Always populate the audit block.
 - Supported component types: battery, resistor, capacitor, inductor, switch, led, ground.
+- Audit block requirements:
+  * concept_explanation: Plain-language explanation of circuit topology (series/parallel), source voltage, equivalent resistance, and expected current/behavior.
+  * detected_issues: Perform sanity checks for short circuits, floating nodes, or missing closed loops. Flag any issues with severity ("error"|"warning"|"info"), location, issue, and suggested_fix.
+  * inference_trace: For every component whose value was estimated (e.g. typical LED forward voltage, unlabeled resistor), flag with field (e.g. "components[0].value"), source="inferred", and detailed reasoning. For explicitly marked values, use source="read_directly".
 
 Few-shot examples:
 

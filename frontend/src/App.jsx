@@ -32,6 +32,9 @@ export default function App() {
         setStatus("success");
       } else if (json.status === "unsupported") {
         setStatus("unsupported");
+      } else if (json.status === "needs_clarification") {
+        setErrorMessage(json.message || "Image is ambiguous or unclear. Please retake photo.");
+        setStatus("needs_clarification");
       } else {
         setErrorMessage(json.message || "Unknown error");
         setStatus("error");
@@ -56,8 +59,21 @@ export default function App() {
         </div>
       )}
 
-      {status === "unsupported" && <p>Diagram type not supported. Try a free-body, circuit, or state machine.</p>}
-      {status === "error"       && <p>Error: {errorMessage}</p>}
+      {status === "unsupported" && (
+        <p style={{ color: "#d9534f" }}>
+          Diagram type not supported. Please provide a free-body, circuit, or state machine diagram.
+        </p>
+      )}
+      {status === "needs_clarification" && (
+        <div style={{ padding: "0.75rem", backgroundColor: "#fff3cd", border: "1px solid #ffeeba", borderRadius: "4px", color: "#856404" }}>
+          <strong>Clarification needed:</strong> {errorMessage}
+        </div>
+      )}
+      {status === "error" && (
+        <p style={{ color: "#d9534f" }}>
+          Error: {errorMessage}
+        </p>
+      )}
     </div>
   );
 }

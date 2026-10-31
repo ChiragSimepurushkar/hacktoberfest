@@ -30,18 +30,27 @@ export default function CircuitRenderer({ data }) {
       </svg>
 
       {/* Component value sliders */}
-      {components.map((c, i) => (
-        <ParamSlider
-          key={`${c.label}-${i}`}
-          label={`${c.label || c.type} (${c.type === "battery" ? "V" : "Ω"})`}
-          value={c.value}
-          min={0}
-          max={c.type === "battery" ? 30 : 10000}
-          step={c.type === "battery" ? 0.1 : 10}
-          onChange={(v) => updateComponent(i, v)}
-          inferred={false}
-        />
-      ))}
+      {components.map((c, i) => {
+        const trace = data?.audit?.inference_trace?.find(
+          (t) =>
+            t.field === `components[${i}].value` ||
+            t.field === `components[${i}]` ||
+            (c.label && t.field.includes(c.label))
+        );
+        return (
+          <ParamSlider
+            key={`${c.label}-${i}`}
+            label={`${c.label || c.type} (${c.type === "battery" ? "V" : "Ω"})`}
+            value={c.value}
+            min={0}
+            max={c.type === "battery" ? 30 : 10000}
+            step={c.type === "battery" ? 0.1 : 10}
+            onChange={(v) => updateComponent(i, v)}
+            inferred={trace?.source === "inferred"}
+            reasoning={trace?.reasoning || ""}
+          />
+        );
+      })}
     </div>
   );
 }

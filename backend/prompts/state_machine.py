@@ -8,10 +8,12 @@ Output must match this schema exactly:
 
 Rules:
 - List all states, transitions (with labels), the initial state, and accepting states.
-- In detected_issues, flag any state with missing outgoing transitions for any input symbol.
 - The initial state is typically marked with an arrow from nowhere (→ q0) or the word "start".
 - Accepting/final states are typically drawn as double circles.
-- Always populate the audit block.
+- Audit block requirements:
+  * concept_explanation: Plain-language summary of what the state machine recognizes, the accepted language pattern, or the control loop purpose.
+  * detected_issues: Check for completeness (missing outgoing transitions from any state for the expected alphabet), unreachable states, or trap states. Flag issues with severity ("error"|"warning"|"info"), location, issue, and suggested_fix.
+  * inference_trace: For any state or transition where the label or accepting status had to be estimated or inferred, add an entry with field, source="inferred", and detailed reasoning.
 
 Few-shot examples:
 
