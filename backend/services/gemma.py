@@ -111,10 +111,12 @@ Here is the extracted parameters and audit data from the diagram:
 
 Student Question: {question}
 
-Provide an educational, clear, friendly explanation.
-- Detail the physical formulas or circuit laws (Ohm's Law, Kirchhoff's Laws, Newton's Laws) step-by-step.
+Provide an educational, clear, friendly explanation in plain conversational text only.
+- Do NOT use any markdown formatting. No asterisks for bold, no ## headers, no - bullet dashes, no backticks, no LaTeX dollar signs.
+- Use plain numbered sentences or short paragraphs instead of bullet lists.
+- Detail the physical formulas or circuit laws (Ohm's Law, Kirchhoff's Laws, Newton's Laws) step-by-step in plain text.
 - If there are errors or discrepancies in the student's notebook or values, point them out gently and show how to calculate the correct values.
-- Keep the response structured with markdown bullet points and bold highlights.
+- Write naturally, as a friendly tutor would speak.
 """
     try:
         response = client.models.generate_content(

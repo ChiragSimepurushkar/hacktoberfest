@@ -6,27 +6,29 @@ import { compileCircuit, solveCircuit } from '../../engines/circuitCompiler.js';
  * Renders an electronic engineering schematic with orthogonal wires,
  * DC voltage source, IEC/zigzag resistor symbols, animated current flow,
  * voltage probes, and live nodal telemetry.
+ * FULLY REACTIVE: reads directly from data prop — no stale local state.
  */
 export default function CircuitStage({ data, onParamChange }) {
-  const scene = compileCircuit(data || {});
   const svgRef = useRef(null);
   const [size, setSize] = useState({ w: 650, h: 420 });
 
-  // Local state for interactive editing
-  const batteryComp = scene.components.find((c) => c.type === 'battery') || { value: 10, label: 'V1' };
-  const resistors = scene.components.filter((c) => c.type === 'resistor');
+  // ── Read values DIRECTLY from the data prop on every render ──
+  // This makes every sidebar slider change immediately reflected in the SVG.
+  const components = (data?.components) || [];
+  const batteryComp = components.find((c) => c.type === 'battery') || { value: 10, label: 'V1' };
+  const resistors   = components.filter((c) => c.type === 'resistor');
 
-  const [vs, setVs] = useState(batteryComp.value || 10);
-  const [r1, setR1] = useState(resistors[0]?.value || 2);
-  const [r2, setR2] = useState(resistors[1]?.value || 4);
-  const [r3, setR3] = useState(resistors[2]?.value || 6);
+  const vs = batteryComp.value ?? 10;
+  const r1 = resistors[0]?.value ?? 2;
+  const r2 = resistors[1]?.value ?? 4;
+  const r3 = resistors[2]?.value ?? 6;
 
-  // Recalculate live solution with local parameters
+  // Build a fresh component array from props and solve the circuit
   const currentComponents = [
-    { type: 'battery', value: vs, label: 'V1', node_a: 'GND', node_b: 'N1' },
-    { type: 'resistor', value: r1, label: 'R1', node_a: 'N1', node_b: 'N2' },
-    { type: 'resistor', value: r2, label: 'R2', node_a: 'N2', node_b: 'GND' },
-    { type: 'resistor', value: r3, label: 'R3', node_a: 'N2', node_b: 'GND' },
+    { type: 'battery',  value: vs, label: 'V1', node_a: 'GND', node_b: 'N1' },
+    { type: 'resistor', value: r1, label: 'R1', node_a: 'N1',  node_b: 'N2' },
+    { type: 'resistor', value: r2, label: 'R2', node_a: 'N2',  node_b: 'GND' },
+    { type: 'resistor', value: r3, label: 'R3', node_a: 'N2',  node_b: 'GND' },
   ];
   const sol = solveCircuit(currentComponents, 'V1');
 

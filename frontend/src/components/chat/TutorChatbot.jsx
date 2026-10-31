@@ -1,6 +1,26 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, MessageSquare } from 'lucide-react';
 
+/**
+ * Strips all Markdown syntax so chatbot output is plain readable text.
+ * Removes: ##/### headers, **bold**, *italic*, `code`, - bullet dashes,
+ * numbered list prefixes, and extra blank lines.
+ */
+function stripMarkdown(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/#{1,6}\s+/gm, '')           // ## headers
+    .replace(/\*\*(.+?)\*\*/gs, '$1')      // **bold**
+    .replace(/\*(.+?)\*/gs, '$1')          // *italic*
+    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')// `code` or ```block```
+    .replace(/^\s*[-*+]\s+/gm, '')         // - bullet dashes
+    .replace(/^\s*\d+\.\s+/gm, '')         // 1. numbered lists
+    .replace(/\$\$?[^$]*\$\$?/g, '')       // inline/block LaTeX
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [link text](url) -> text
+    .replace(/\n{3,}/g, '\n\n')            // collapse 3+ blank lines to 2
+    .trim();
+}
+
 const SUGGESTED_PROMPTS = {
   circuit: [
     'Why is Req = 4.4 Ω instead of 12 Ω?',
@@ -23,23 +43,23 @@ const SUGGESTED_PROMPTS = {
 
 const LOCAL_FALLBACKS = {
   'Why is Req = 4.4 Ω instead of 12 Ω?':
-    'In this circuit, **R2 (4 Ω)** and **R3 (6 Ω)** are connected in **parallel**, not in series! \n\nTheir combined parallel resistance is:\n$$\\frac{1}{R_p} = \\frac{1}{4} + \\frac{1}{6} = \\frac{5}{12} \\implies R_p = \\frac{12}{5} = 2.4\\,\\Omega$$\n\nThen **R1 (2 Ω)** is in series with this parallel bank:\n$$R_{\\text{eq}} = R_1 + R_p = 2 + 2.4 = 4.4\\,\\Omega$$\n\nIf all three were in series, you would get $2 + 4 + 6 = 12\\,\\Omega$, but parallel branches always reduce equivalent resistance!',
+    'R2 (4 Ω) and R3 (6 Ω) are connected in parallel, not in series.\n\nTheir combined parallel resistance: 1/Rp = 1/4 + 1/6 = 5/12, so Rp = 2.4 Ω.\n\nThen R1 (2 Ω) is in series with this parallel bank: Req = R1 + Rp = 2 + 2.4 = 4.4 Ω.\n\nIf all three were in series you would get 2 + 4 + 6 = 12 Ω, but parallel branches always reduce equivalent resistance.',
 
   'How does the 2.27 A current split between R2 and R3?':
-    'The total current from the 10V source is:\n$$I = \\frac{V}{R_{\\text{eq}}} = \\frac{10}{4.4} = 2.27\\text{ A}$$\n\nThis entire 2.27 A flows through $R_1$, causing a voltage drop of $V_1 = 2.27 \\times 2 = 4.54\\text{ V}$.\n\nThe remaining voltage across the parallel junction is:\n$$V_p = 10 - 4.54 = 5.46\\text{ V}$$\n\nCurrent splits inversely proportional to resistance:\n- Through **R2 (4 Ω)**: $I_2 = 5.46 / 4 = 1.365\\text{ A}$\n- Through **R3 (6 Ω)**: $I_3 = 5.46 / 6 = 0.910\\text{ A}$\n\nCheck: $1.365 + 0.91 = 2.275\\text{ A} \\approx 2.27\\text{ A}$ (Kirchhoff\'s Current Law satisfied!).',
+    'The total current from the 10 V source is I = V / Req = 10 / 4.4 = 2.27 A.\n\nThis entire 2.27 A flows through R1, causing a voltage drop of V1 = 2.27 x 2 = 4.54 V.\n\nThe remaining voltage across the parallel junction is Vp = 10 - 4.54 = 5.46 V.\n\nCurrent splits inversely proportional to resistance.\nThrough R2 (4 Ω): I2 = 5.46 / 4 = 1.365 A\nThrough R3 (6 Ω): I3 = 5.46 / 6 = 0.910 A\n\nCheck: 1.365 + 0.91 = 2.275 A, which equals the total current. Kirchhoff\'s Current Law is satisfied.',
 
   'Why did the student write f = 8 N when μ·N = 5.1 N?':
-    'Great observation! **The student made a conceptual error in their handwritten calculation.**\n\n1. In the "Given" section, the diagram specifies an external applied force or friction value labeled $f = 8\\text{ N}$.\n2. However, the student calculated:\n$$N = mg\\cos(30^\\circ) = 2 \\times 9.8 \\times 0.866 = 16.98 \\approx 17\\text{ N}$$\n$$f_{\\text{max}} = \\mu N = 0.3 \\times 17 = 5.1\\text{ N}$$\n3. But in Step 2, they used $f = 8\\text{ N}$ instead of $5.1\\text{ N}$ when calculating $F_{\\text{net}} = 10 - 8 - 9.8 = -7.8\\text{ N}$.\n\n**Gemma Insight Layer flagged this!** The physical maximum static friction is $5.1\\text{ N}$, so friction cannot exceed $5.1\\text{ N}$.',
+    'Great observation. The student made a conceptual error in their handwritten calculation.\n\nThe diagram specifies an external applied friction value labeled f = 8 N.\nHowever, the student calculated: N = mg cos(30°) = 2 x 9.8 x 0.866 = 16.98 ≈ 17 N\nAnd maximum friction: f_max = mu x N = 0.3 x 17 = 5.1 N\n\nBut in the net force step they used f = 8 N instead of 5.1 N.\n\nThe physical maximum static friction is 5.1 N, so friction cannot exceed that value. The student likely copied the given applied force (8 N) as the friction instead of computing it from mu x N.',
 
   'Why is the string "01" accepted while "00" is rejected?':
-    'Let\'s trace the DFA step-by-step from the initial state **q0**:\n\n- **String "01"**:\n  1. Start at `q0`.\n  2. Read symbol `0`: Transition `q0 --(0)--> q1`.\n  3. Read symbol `1`: Transition `q1 --(1)--> q2`.\n  4. String ends at state `q2`. Since `q2` is marked with a double circle, it is an **accepting state**. Result: **ACCEPTED ✓**!\n\n- **String "00"**:\n  1. Start at `q0`.\n  2. Read symbol `0`: Transition `q0 --(0)--> q1`.\n  3. Read symbol `0`: From `q1`, there is no valid transition on `0`! Automaton halts in a trap/reject state. Result: **REJECTED ✗**!',
+    'Let us trace the DFA step-by-step from initial state q0.\n\nString "01":\nStart at q0. Read 0: transition q0 --> q1. Read 1: transition q1 --> q2. String ends at q2 which is an accepting state (double circle). Result: ACCEPTED.\n\nString "00":\nStart at q0. Read 0: transition q0 --> q1. Read 0: from q1 there is no transition on symbol 0. The automaton halts in the trap reject state. Result: REJECTED.',
 };
 
 export default function TutorChatbot({ diagramType, extractedData }) {
   const [messages, setMessages] = useState([
     {
       sender: 'gemma',
-      text: `Hello! I am your **Gemma 4 Lab Tutor**. I have analyzed this **${diagramType?.replace('_', ' ')}** diagram. You can ask me any question about the formulas, verify the student's handwritten steps, or explore what happens if values change!`,
+      text: stripMarkdown(`Hello! I am your Gemma 4 Lab Tutor. I have analyzed this ${diagramType?.replace('_', ' ')} diagram. You can ask me any question about the formulas, verify the student handwritten steps, or explore what happens if values change!`),
     },
   ]);
   const [input, setInput] = useState('');
@@ -74,7 +94,7 @@ export default function TutorChatbot({ diagramType, extractedData }) {
       if (res.ok) {
         const json = await res.json();
         if (json.answer) {
-          setMessages((prev) => [...prev, { sender: 'gemma', text: json.answer }]);
+          setMessages((prev) => [...prev, { sender: 'gemma', text: stripMarkdown(json.answer) }]);
           setLoading(false);
           return;
         }
@@ -84,10 +104,10 @@ export default function TutorChatbot({ diagramType, extractedData }) {
       // Use intelligent educational fallback
       const fallback =
         LOCAL_FALLBACKS[q] ||
-        `Based on this **${diagramType?.replace('_', ' ')}** diagram, Gemma calculated the solution using deterministic governing equations. For ${q}, review the equilibrium and nodal conditions shown in the analysis cards above!`;
+        `Based on this ${diagramType?.replace('_', ' ')} diagram, the solution uses deterministic governing equations. For this question, review the equilibrium and nodal conditions shown in the analysis cards above.`;
 
       setTimeout(() => {
-        setMessages((prev) => [...prev, { sender: 'gemma', text: fallback }]);
+        setMessages((prev) => [...prev, { sender: 'gemma', text: stripMarkdown(fallback) }]);
         setLoading(false);
       }, 500);
     }
