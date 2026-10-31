@@ -60,7 +60,7 @@ def classify_image(image_bytes: bytes) -> str:
             max_output_tokens=16,
         ),
     )
-    result = response.text.strip().lower()
+    result = (response.text or "").strip().lower()
     # Guard against any extra punctuation / whitespace the model may add
     for candidate in VALID_TYPES:
         if candidate in result:
@@ -100,4 +100,12 @@ def extract_diagram(
             response_mime_type="application/json",
         ),
     )
-    return json.loads(response.text)
+    text = (response.text or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    return json.loads(text)
