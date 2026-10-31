@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useRunStore } from '../store/run.js';
 import { compileFreeBody }    from '../engines/freeBodyCompiler.js';
-import { compileCircuit }     from '../engines/circuitCompiler.js';
+import { compileCircuit, solveCircuit } from '../engines/circuitCompiler.js';
 import { compileStateMachine } from '../engines/stateMachineCompiler.js';
 import FreeBodyStage   from '../components/sim/FreeBodyStage.jsx';
 import CircuitStage    from '../components/sim/CircuitStage.jsx';
@@ -196,9 +196,17 @@ function FreeBodyPanel({ data, onChange }) {
   const netF  = scene.netAlongSurface;
   const accel = scene.accelerationAlongSurface;
 
+  const inclineAngle = scene.inclineAngleDeg;
+
   return (
     <div>
       <PanelSection title="Parameters">
+        {data.surface === 'incline' && (
+          <SliderRow
+            label="Incline Angle (°)" value={inclineAngle} min={0} max={60} step={1}
+            onChange={(v) => onChange((p) => ({ ...p, incline_angle: v, surface_angle: v }))}
+          />
+        )}
         <SliderRow
           label="Mass (kg)" value={mass} min={0.1} max={50} step={0.1}
           onChange={(v) => onChange((p) => ({ ...p, mass: v }))}
@@ -239,6 +247,7 @@ function FreeBodyPanel({ data, onChange }) {
 /* ── Circuit side panel ── */
 function CircuitPanel({ data, onChange }) {
   const components = data.components || [];
+  const sol = solveCircuit(components, data.source);
 
   function updateComp(i, value) {
     onChange((prev) => ({
@@ -261,6 +270,16 @@ function CircuitPanel({ data, onChange }) {
             onChange={(v) => updateComp(i, v)}
           />
         ))}
+      </PanelSection>
+
+      <hr className="divider" />
+      <PanelSection title="Circuit Solution">
+        <ResultRow label="Equivalent R" value={`${sol.equivalentResistance.toFixed(2)} Ω`} />
+        {sol.isSeriesParallel && (
+          <ResultRow label="Parallel R" value={`${sol.parallelResistance.toFixed(2)} Ω`} />
+        )}
+        <ResultRow label="Total Current" value={`${sol.currentAmps.toFixed(2)} A`} />
+        <ResultRow label="Power" value={`${sol.powerWatts.toFixed(2)} W`} />
       </PanelSection>
     </div>
   );

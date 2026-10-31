@@ -74,13 +74,23 @@ export function compileFreeBody(data) {
   // The schema has no explicit incline-angle field, but the normal force's
   // angle encodes it: a surface rising at angle theta has its normal at
   // 90+theta. Derive from that instead of assuming every incline is 30 deg.
+  // An explicit incline_angle/surface_angle (e.g. from the interactive angle
+  // slider) always wins over the derived value.
   const normalForce = (data.forces || []).find(
     (f) => canonicalForceKey(f.label) === "normal"
   );
   const inferredAngle = normalForce ? Math.round(normalForce.angle - 90) : null;
+  const explicitAngle =
+    typeof data.incline_angle === "number"
+      ? data.incline_angle
+      : typeof data.surface_angle === "number"
+        ? data.surface_angle
+        : null;
   const inclineAngleDeg =
     surface === "incline"
-      ? (inferredAngle != null && inferredAngle > 0 && inferredAngle < 90 ? inferredAngle : 30)
+      ? (explicitAngle != null
+          ? explicitAngle
+          : (inferredAngle != null && inferredAngle > 0 && inferredAngle < 90 ? inferredAngle : 30))
       : 0;
 
   const forces = (data.forces || []).map((f) => ({

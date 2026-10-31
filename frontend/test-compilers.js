@@ -43,11 +43,12 @@ const cktData = JSON.parse(fs.readFileSync(path.join(root, 'fixtures', 'circuit.
 const cktScene = compileCircuit(cktData);
 
 assert(cktScene.engine === "circuit", "Circuit compiler identifies engine as 'circuit'");
-assert(cktScene.nodes.length >= 3, "Circuit compiler identifies nodes A, B, C");
-assert(cktScene.solution.equivalentResistance === 550, "Circuit solver computes Req = 550 ohms (220 + 330)");
-assert(Math.abs(cktScene.solution.currentMilliAmps - 16.36) < 0.1, "Circuit solver computes Current ≈ 16.36 mA");
-assert(cktScene.solution.nodeVoltages["B"] === 9.0, "Node B voltage is 9V (battery)");
-assert(cktScene.solution.nodeVoltages["A"] === 0.0, "Node A voltage is 0V (GND)");
+assert(cktScene.nodes.length >= 3, "Circuit compiler identifies nodes GND, N1, N2");
+assert(cktScene.solution.isSeriesParallel === true, "Circuit solver detects R2 ∥ R3 as a parallel pair");
+assert(Math.abs(cktScene.solution.equivalentResistance - 4.4) < 0.01, "Circuit solver computes Req = R1 + (R2*R3)/(R2+R3) = 4.4 ohms");
+assert(Math.abs(cktScene.solution.currentMilliAmps - 2272.7) < 1, "Circuit solver computes Current ≈ 2272.7 mA");
+assert(cktScene.solution.nodeVoltages["N1"] === 10.0, "Node N1 voltage is 10V (battery)");
+assert(cktScene.solution.nodeVoltages["GND"] === 0.0, "Node GND voltage is 0V");
 
 // 3. State Machine Tests
 const smData = JSON.parse(fs.readFileSync(path.join(root, 'fixtures', 'state_machine.json'), 'utf8'));

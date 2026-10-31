@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronDown, ChevronUp, Copy, Check, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
 import { useRunStore } from '../store/run.js';
+import TutorChatbot from '../components/chat/TutorChatbot.jsx';
 
 const SEVERITY_CONFIG = {
   error:   { label: 'Error',   color: 'var(--err)',  bg: '#FEF2F2', border: '#FECACA', icon: '✕' },
@@ -143,6 +144,9 @@ export default function Analysis() {
       <Card id="raw-json-card">
         <RawJson data={extractedData} />
       </Card>
+
+      {/* 6. AI Tutor */}
+      <TutorChatbot diagramType={diagramType} extractedData={extractedData} />
     </div>
   );
 }

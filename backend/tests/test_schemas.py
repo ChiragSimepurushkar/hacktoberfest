@@ -30,7 +30,7 @@ class TestFixturesValidation:
         data = json.loads((FIXTURES_DIR / "circuit.json").read_text())
         model = Circuit.model_validate(data)
         assert model.source == "V1"
-        assert len(model.components) == 3
+        assert len(model.components) == 4
         assert any(c.type == "battery" for c in model.components)
         assert model.audit.concept_explanation != ""
 
