@@ -8,6 +8,14 @@ Output must match this schema exactly:
 
 Rules:
 - angle is in degrees; 0 = pointing right, 90 = pointing up.
+- Force labels: always set "label" to one of these four canonical values —
+  "gravity", "normal", "applied", "friction" — based on what the force
+  physically IS, never the literal symbol or letter handwritten next to the
+  arrow in the photo. For example: an arrow annotated "N" or "Normal force"
+  is still label "normal"; "mg", "W", or "Weight" is still "gravity"; "f",
+  "friction", or "μN" is still "friction"; any other external push/pull
+  (often annotated "F") is "applied". Only use a different label for a force
+  that genuinely doesn't fit one of these four (e.g. "tension", "spring").
 - Infer force magnitudes from labeled values; if unlabeled, estimate from
   relative arrow length and state the assumptions used in inference_trace.
 - If the image is ambiguous or illegible, return the field

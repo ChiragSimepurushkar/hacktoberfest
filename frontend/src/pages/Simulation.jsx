@@ -12,6 +12,7 @@ import { compileStateMachine } from '../engines/stateMachineCompiler.js';
 import FreeBodyStage   from '../components/sim/FreeBodyStage.jsx';
 import CircuitStage    from '../components/sim/CircuitStage.jsx';
 import StateMachineStage from '../components/sim/StateMachineStage.jsx';
+import { canonicalForceKey, prettyForceLabel } from '../lib/forceLabels.js';
 
 const STAGE_MAP = {
   free_body:     FreeBodyStage,
@@ -53,7 +54,7 @@ export default function Simulation() {
     setParams(extractedData);
   }, [extractedData]);
 
-  if (!diagramType || !extractedData) return null;
+  if (!diagramType || !extractedData || !params) return null;
 
   const StageComponent = STAGE_MAP[diagramType];
   const issueCount     = extractedData.audit?.detected_issues?.length || 0;
@@ -128,10 +129,7 @@ export default function Simulation() {
             style={{ width: '100%', height: '100%', position: 'relative' }}
           >
             {StageComponent && (
-              <StageComponent
-                data={extractedData}
-                onParamsChange={setParams}
-              />
+              <StageComponent data={params} />
             )}
 
             {/* Photo peek button */}
@@ -160,13 +158,13 @@ export default function Simulation() {
           overflowY: 'auto',
           flexShrink: 0,
         }}>
-          {params && diagramType === 'free_body' && (
-            <FreeBodyPanel data={params} />
+          {diagramType === 'free_body' && (
+            <FreeBodyPanel data={params} onChange={setParams} />
           )}
-          {params && diagramType === 'circuit' && (
-            <CircuitPanel data={params} />
+          {diagramType === 'circuit' && (
+            <CircuitPanel data={params} onChange={setParams} />
           )}
-          {params && diagramType === 'state_machine' && (
+          {diagramType === 'state_machine' && (
             <StateMachinePanel data={params} />
           )}
         </div>
@@ -181,19 +179,17 @@ export default function Simulation() {
 }
 
 /* ── Free-body side panel ── */
-function FreeBodyPanel({ data }) {
-  const [localData, setLocalData] = useState(data);
-
+function FreeBodyPanel({ data, onChange }) {
   function updateForce(index, key, value) {
-    setLocalData((prev) => ({
+    onChange((prev) => ({
       ...prev,
       forces: prev.forces.map((f, i) => (i === index ? { ...f, [key]: value } : f)),
     }));
   }
 
-  const forces = localData.forces || [];
-  const mass   = localData.mass   || 0;
-  const mu     = localData.friction_coeff || 0;
+  const forces = data.forces || [];
+  const mass   = data.mass   || 0;
+  const mu     = data.friction_coeff || 0;
 
   // Compute results
   const netX = forces.reduce((sum, f) => sum + f.magnitude * Math.cos((f.angle * Math.PI) / 180), 0);
@@ -206,25 +202,25 @@ function FreeBodyPanel({ data }) {
       <PanelSection title="Parameters">
         <SliderRow
           label="Mass (kg)" value={mass} min={0.1} max={50} step={0.1}
-          onChange={(v) => setLocalData((p) => ({ ...p, mass: v }))}
+          onChange={(v) => onChange((p) => ({ ...p, mass: v }))}
         />
         <SliderRow
           label="Friction μ" value={mu} min={0} max={1} step={0.01}
-          onChange={(v) => setLocalData((p) => ({ ...p, friction_coeff: v }))}
+          onChange={(v) => onChange((p) => ({ ...p, friction_coeff: v }))}
         />
         {forces.map((f, i) => {
           const trace = data.audit?.inference_trace?.find((t) => t.field === `forces[${i}].magnitude`);
           return (
             <SliderRow
               key={`${f.label}-${i}`}
-              label={`${capitalize(f.label)} force (N)`}
+              label={`${prettyForceLabel(f.label)} force (N)`}
               value={f.magnitude}
               min={0}
               max={200}
               step={0.5}
               inferred={trace?.source === 'inferred'}
               inferredReason={trace?.reasoning}
-              color={VECTOR_COLORS[f.label]}
+              color={VECTOR_COLORS[canonicalForceKey(f.label)]}
               onChange={(v) => updateForce(i, 'magnitude', v)}
             />
           );
@@ -242,11 +238,14 @@ function FreeBodyPanel({ data }) {
 }
 
 /* ── Circuit side panel ── */
-function CircuitPanel({ data }) {
-  const [components, setComponents] = useState(data.components || []);
+function CircuitPanel({ data, onChange }) {
+  const components = data.components || [];
 
   function updateComp(i, value) {
-    setComponents((prev) => prev.map((c, j) => (j === i ? { ...c, value } : c)));
+    onChange((prev) => ({
+      ...prev,
+      components: prev.components.map((c, j) => (j === i ? { ...c, value } : c)),
+    }));
   }
 
   return (

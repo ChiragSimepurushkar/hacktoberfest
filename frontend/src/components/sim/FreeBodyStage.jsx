@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { compileFreeBody } from '../../engines/freeBodyCompiler.js';
+import { canonicalForceKey } from '../../lib/forceLabels.js';
 
 const VECTOR_COLORS = {
   gravity:  '#D9531E',
@@ -103,8 +104,9 @@ export default function FreeBodyStage({ data }) {
         const len    = Math.min(force.magnitude * scale, 120);
         const x2     = cx + len * Math.cos(rad);
         const y2     = cy - len * Math.sin(rad); // SVG Y is inverted
-        const color  = VECTOR_COLORS[force.label] || '#888';
-        const markerName = Object.keys(VECTOR_COLORS).find((k) => k === force.label) || 'net';
+        const forceKey = canonicalForceKey(force.label);
+        const color  = VECTOR_COLORS[forceKey] || '#888';
+        const markerName = VECTOR_COLORS[forceKey] ? forceKey : 'net';
 
         return (
           <g key={`force-${i}`}>
@@ -126,7 +128,7 @@ export default function FreeBodyStage({ data }) {
               fontFamily="var(--font-mono)"
               fontWeight="600"
             >
-              {force.label === 'gravity' ? 'mg' : force.label === 'friction' ? 'f' : force.label.charAt(0).toUpperCase() + force.label.slice(1)} = {force.magnitude.toFixed(1)} N
+              {forceKey === 'gravity' ? 'mg' : forceKey === 'friction' ? 'f' : force.label.charAt(0).toUpperCase() + force.label.slice(1)} = {force.magnitude.toFixed(1)} N
             </text>
           </g>
         );
