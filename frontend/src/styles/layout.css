@@ -1,0 +1,363 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Lab Twin — Layout System
+   AppShell · Sidebar · TopBar · Stepper · Mobile bottom tab bar
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ─── App shell ─── */
+.app-shell {
+  display: flex;
+  height: 100dvh;           /* dynamic viewport height — handles iOS address bar */
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── Desktop Sidebar ─── */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  height: 100%;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+/* ─── Logo area ─── */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  flex-shrink: 0;
+  min-height: 60px;
+}
+
+/* Full horizontal logo (shown in normal sidebar) */
+.sidebar-logo-full {
+  width: 120px;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* Icon-only logo (hidden in full sidebar, shown in collapsed) */
+.sidebar-logo-icon {
+  display: none;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+/* ─── Sidebar nav ─── */
+.sidebar-nav {
+  flex: 1;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.sidebar-link:hover {
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+.sidebar-link.active {
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+.sidebar-link svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-link-label {
+  /* hidden when sidebar is icon-only */
+}
+
+/* ─── Sidebar footer ─── */
+.sidebar-footer {
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-new-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--navy);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.sidebar-new-btn:hover {
+  background: var(--navy-hover);
+  box-shadow: 0 4px 16px rgba(11,27,58,.2);
+}
+
+/* ─── Main content ─── */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.page-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* bottom padding on mobile to avoid overlap with tab bar */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* ─── TopBar ─── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--topbar-h);
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ─── Stepper ─── */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.stepper-step.active { color: var(--ink); }
+.stepper-step.done   { color: var(--ok); }
+
+.stepper-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.stepper-step.active .stepper-num {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: white;
+}
+
+.stepper-step.done .stepper-num {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: white;
+}
+
+.stepper-divider {
+  width: 24px;
+  height: 1px;
+  background: var(--line);
+  margin: 0 4px;
+}
+
+/* ─── Back button ─── */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-fast), background var(--duration-fast);
+  text-decoration: none;
+}
+
+.back-btn:hover {
+  color: var(--ink);
+  background: var(--sunken);
+}
+
+/* ══════════════════════════════════════════════════════════
+   MOBILE BOTTOM TAB BAR
+   Hidden on desktop, visible on phone
+══════════════════════════════════════════════════════════ */
+.mobile-tabbar {
+  display: none; /* hidden on desktop */
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 16px rgba(20,24,31,.06);
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.mobile-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  transition: color var(--duration-fast);
+  -webkit-tap-highlight-color: transparent;
+  padding: 8px 4px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.mobile-tab.active {
+  color: var(--navy);
+}
+
+.mobile-tab svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+}
+
+.mobile-tab-label {
+  font-size: 10px;
+}
+
+.mobile-tab-new {
+  color: var(--ink-2);
+}
+
+.mobile-tab-new-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--navy);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: white;
+  margin-bottom: 2px;
+}
+
+.mobile-tab-new-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+══════════════════════════════════════════════════════════ */
+
+/* Tablet — md (768–1023px): icon-only sidebar */
+@media (max-width: 1023px) and (min-width: 641px) {
+  :root { --sidebar-w: 64px; }
+
+  .sidebar-logo-full { display: none; }
+  .sidebar-logo-icon {
+    display: block;
+    margin: 0 auto;
+  }
+  .sidebar-brand {
+    justify-content: center;
+    padding: 14px 8px;
+  }
+  .sidebar-link {
+    justify-content: center;
+    padding: 10px 8px;
+  }
+  .sidebar-link-label { display: none; }
+  .sidebar-new-btn {
+    justify-content: center;
+    padding: 10px 8px;
+  }
+  .sidebar-new-btn span { display: none; }
+}
+
+/* Phone — base (≤640px): hide sidebar, show tab bar */
+@media (max-width: 640px) {
+  .sidebar { display: none; }
+  .mobile-tabbar { display: flex; }
+  .app-shell { padding-bottom: 0; }
+
+  /* extra space at bottom of page content for tab bar */
+  .page-scroll {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}

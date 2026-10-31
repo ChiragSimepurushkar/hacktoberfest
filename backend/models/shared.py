@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class InferenceEntry(BaseModel):
     field: str
-    source: Literal["read_directly", "inferred"]
+    source: Literal["read_directly", "inferred", "computed"]
     reasoning: str
 
 
