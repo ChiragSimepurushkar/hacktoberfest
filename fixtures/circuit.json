@@ -1,0 +1,16 @@
+{
+  "components": [
+    { "type": "battery",  "value": 9,   "node_a": "A", "node_b": "B", "label": "V1" },
+    { "type": "resistor", "value": 220, "node_a": "B", "node_b": "C", "label": "R1" },
+    { "type": "resistor", "value": 330, "node_a": "C", "node_b": "A", "label": "R2" }
+  ],
+  "source": "V1",
+  "audit": {
+    "concept_explanation": "Series resistor network driven by a 9V battery. Total R = 550 Ω, I ≈ 16.4 mA.",
+    "detected_issues": [],
+    "inference_trace": [
+      { "field": "components[1].value", "source": "read_directly", "reasoning": "220 labeled next to resistor symbol." },
+      { "field": "components[2].value", "source": "read_directly", "reasoning": "330 labeled next to resistor symbol." }
+    ]
+  }
+}

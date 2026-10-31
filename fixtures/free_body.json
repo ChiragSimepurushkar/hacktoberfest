@@ -1,0 +1,28 @@
+{
+  "mass": 2.5,
+  "forces": [
+    { "label": "gravity",  "magnitude": 24.525, "angle": 270, "anchor": "center" },
+    { "label": "normal",   "magnitude": 21.2,   "angle": 90,  "anchor": "base"   },
+    { "label": "applied",  "magnitude": 10.0,   "angle": 30,  "anchor": "center" }
+  ],
+  "surface": "incline",
+  "friction_coeff": 0.3,
+  "audit": {
+    "concept_explanation": "Block on an incline under gravity, normal force, and an applied force.",
+    "detected_issues": [
+      {
+        "severity": "warning",
+        "location": "force balance",
+        "issue": "Normal force should be mg·cos(30°) ≈ 21.2 N for equilibrium.",
+        "suggested_fix": "Check the incline angle or recompute the normal force."
+      }
+    ],
+    "inference_trace": [
+      {
+        "field": "forces[2].magnitude",
+        "source": "inferred",
+        "reasoning": "No label on diagram; estimated from relative arrow length (~40% of gravity arrow)."
+      }
+    ]
+  }
+}
