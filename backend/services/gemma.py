@@ -1,8 +1,11 @@
 """Gemma 4 service — classify and extract diagrams via the Gemini API."""
 import json
 import os
+import io
+from PIL import Image
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 from prompts.classify import CLASSIFY_PROMPT, VALID_TYPES
@@ -20,16 +23,40 @@ _EXTRACTION_PROMPTS = {
     "state_machine": STATE_MACHINE_EXTRACTION_PROMPT,
 }
 
-# TODO: initialise once at startup
-def _get_model() -> genai.GenerativeModel:
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    return genai.GenerativeModel(model_name=os.getenv("GEMMA_MODEL", "gemma-4-12b-it"))
+_client = None
 
+def _get_client() -> genai.Client:
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        _client = genai.Client(api_key=api_key)
+    return _client
+
+def _get_model_name() -> str:
+    return os.getenv("GEMMA_MODEL", "gemma-4-26b-a4b-it")
 
 def classify_image(image_bytes: bytes) -> str:
     """Return one of: free_body | circuit | state_machine | unsupported."""
-    # TODO: implement — call Gemma with CLASSIFY_PROMPT + image_bytes
-    raise NotImplementedError
+    client = _get_client()
+    model_name = _get_model_name()
+    pil_image = Image.open(io.BytesIO(image_bytes))
+
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[pil_image, CLASSIFY_PROMPT],
+            config=types.GenerateContentConfig(
+                temperature=0.0
+            )
+        )
+        cat = response.text.strip().lower()
+        for valid in VALID_TYPES:
+            if valid in cat:
+                return valid
+        return "unsupported"
+    except Exception as e:
+        print(f"Classification error: {e}")
+        return "unsupported"
 
 
 def extract_diagram(
@@ -43,8 +70,26 @@ def extract_diagram(
     Returns the parsed JSON dict (not yet validated against pydantic).
     Pass error_feedback to trigger the self-repair path on retries.
     """
-    # TODO: implement
-    # 1. Build prompt = _EXTRACTION_PROMPTS[diagram_type].format(schema=schema_json, error_feedback=...)
-    # 2. Call model with response_mime_type="application/json"
-    # 3. Return json.loads(response.text)
-    raise NotImplementedError
+    client = _get_client()
+    model_name = _get_model_name()
+    pil_image = Image.open(io.BytesIO(image_bytes))
+
+    prompt_template = _EXTRACTION_PROMPTS.get(diagram_type, FREE_BODY_EXTRACTION_PROMPT)
+    feedback_str = f"PREVIOUS VALIDATION ERROR:\n{error_feedback}\nPlease correct the JSON output." if error_feedback else ""
+    full_prompt = prompt_template.format(schema=schema_json, error_feedback=feedback_str)
+
+    response = client.models.generate_content(
+        model=model_name,
+        contents=[pil_image, full_prompt],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.1
+        )
+    )
+
+    text = response.text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return json.loads(text.strip())
