@@ -4,15 +4,22 @@ import { compileStateMachine } from '../../engines/stateMachineCompiler.js';
 
 /**
  * State machine stage using Cytoscape.js.
- * Styled with Lab Twin design tokens.
+ *
+ * Props:
+ *   data        — raw extracted JSON
+ *   controller  — SimController from mountInterface.createController()
+ *                 When provided:
+ *                   • registers a highlight handler so controller.highlight(stateId)
+ *                     highlights that node (used by StateMachinePanel's step/reset)
+ *                   • stage calls controller._fireSelect(stateId) when user clicks a node
  */
-export default function StateMachineStage({ data }) {
+export default function StateMachineStage({ data, controller }) {
   const containerRef = useRef(null);
   const cyRef        = useRef(null);
-  const [current, setCurrent] = useState(data.initial);
 
   const scene = compileStateMachine(data);
 
+  // ── Mount Cytoscape ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -23,26 +30,23 @@ export default function StateMachineStage({ data }) {
         {
           selector: 'node',
           style: {
-            label:            'data(id)',
-            'text-valign':    'center',
-            'text-halign':    'center',
+            label:              'data(id)',
+            'text-valign':      'center',
+            'text-halign':      'center',
             'background-color': '#FFFFFF',
-            'border-width':   2,
-            'border-color':   '#14181F',
-            color:            '#14181F',
-            'font-family':    'JetBrains Mono, monospace',
-            'font-size':      13,
-            'font-weight':    600,
-            width:            44,
-            height:           44,
+            'border-width':     2,
+            'border-color':     '#14181F',
+            color:              '#14181F',
+            'font-family':      'JetBrains Mono, monospace',
+            'font-size':        13,
+            'font-weight':      600,
+            width:              44,
+            height:             44,
           },
         },
         {
           selector: 'node.accepting',
-          style: {
-            'border-width': 4,
-            'border-color': '#0B1B3A',
-          },
+          style: { 'border-width': 4, 'border-color': '#0B1B3A' },
         },
         {
           selector: 'node.current',
@@ -53,16 +57,24 @@ export default function StateMachineStage({ data }) {
           },
         },
         {
+          selector: 'node.highlighted',
+          style: {
+            'background-color': '#2F5FD0',
+            'border-color':     '#2F5FD0',
+            color:              '#FFFFFF',
+          },
+        },
+        {
           selector: 'edge',
           style: {
-            label:                'data(label)',
-            'curve-style':        'bezier',
-            'target-arrow-shape': 'triangle',
-            'target-arrow-color': '#4A5160',
-            'line-color':         '#4A5160',
-            'font-family':        'JetBrains Mono, monospace',
-            'font-size':          11,
-            color:                '#4A5160',
+            label:                    'data(label)',
+            'curve-style':            'bezier',
+            'target-arrow-shape':     'triangle',
+            'target-arrow-color':     '#4A5160',
+            'line-color':             '#4A5160',
+            'font-family':            'JetBrains Mono, monospace',
+            'font-size':              11,
+            color:                    '#4A5160',
             'text-background-opacity': 1,
             'text-background-color':   '#FAF8F4',
             'text-background-padding': '2px',
@@ -90,19 +102,30 @@ export default function StateMachineStage({ data }) {
     // Highlight initial state
     cyRef.current?.getElementById(data.initial).addClass('current');
 
+    // Click → onSelect
+    cyRef.current?.on('tap', 'node', (evt) => {
+      controller?._fireSelect(evt.target.id());
+    });
+
     return () => {
       cyRef.current?.destroy();
       cyRef.current = null;
     };
-  }, [data]);
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update current-state highlight when `current` changes
+  // ── Register controller highlight handler ───────────────────────────────
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.nodes().removeClass('current');
-    cy.getElementById(current).addClass('current');
-  }, [current]);
+    if (!controller) return;
+
+    controller._registerHighlight((stateId) => {
+      const cy = cyRef.current;
+      if (!cy) return;
+      cy.nodes().removeClass('current');
+      if (stateId) cy.getElementById(stateId).addClass('current');
+    });
+
+    return () => controller._registerHighlight(null);
+  }, [controller]);
 
   return (
     <div

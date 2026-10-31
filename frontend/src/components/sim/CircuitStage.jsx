@@ -1,12 +1,36 @@
+import { useEffect, useState } from 'react';
 import { compileCircuit } from '../../engines/circuitCompiler.js';
 
 /**
  * Circuit diagram stage.
- * Renders a simple SVG schematic from the compiled node/component data.
- * TODO: Replace with CircuitJS iframe embed once Dev B confirms embedding method.
+ *
+ * Props:
+ *   data        — raw extracted JSON
+ *   controller  — SimController from mountInterface.createController()
+ *                 When provided, the stage re-renders when params change
+ *                 (component values updated via slider → setParam).
  */
-export default function CircuitStage({ data }) {
-  const scene = compileCircuit(data);
+export default function CircuitStage({ data, controller }) {
+  const [localData, setLocalData] = useState(data);
+
+  // ── Sync component values from controller params ──────────────────────
+  useEffect(() => {
+    if (!controller) return;
+    const unsub = controller.onResults(() => {
+      const params = controller.getParams();
+      setLocalData((prev) => {
+        const next = { ...prev };
+        next.components = (prev.components || []).map((c, i) => {
+          const p = params.find((p) => p.path === `components[${i}].value`);
+          return p ? { ...c, value: p.value } : c;
+        });
+        return next;
+      });
+    });
+    return unsub;
+  }, [controller]);
+
+  const scene = compileCircuit(localData);
   const { nodes, components } = scene;
 
   const W = 500;
@@ -39,8 +63,8 @@ export default function CircuitStage({ data }) {
         const from = nodePositions[c.node_a];
         const to   = nodePositions[c.node_b];
         if (!from || !to) return null;
-        const mx = (from.x + to.x) / 2;
-        const my = (from.y + to.y) / 2;
+        const mx    = (from.x + to.x) / 2;
+        const my    = (from.y + to.y) / 2;
         const color = c.type === 'battery' ? 'var(--vec-gravity)' : 'var(--info)';
 
         return (
@@ -50,10 +74,9 @@ export default function CircuitStage({ data }) {
               stroke={color} strokeWidth="2"
               strokeDasharray={c.type === 'battery' ? '' : '6,3'}
             />
-            {/* Component label */}
             <rect
-              x={mx - 32} y={my - 10}
-              width={64} height={20}
+              x={mx - 36} y={my - 11}
+              width={72} height={22}
               rx="4"
               fill="white"
               stroke={color}
@@ -63,13 +86,11 @@ export default function CircuitStage({ data }) {
               x={mx} y={my + 5}
               textAnchor="middle"
               fill={color}
-              fontSize="10"
+              fontSize="11"
               fontFamily="var(--font-mono)"
               fontWeight="600"
             >
-              {c.type === 'battery'
-                ? `${c.value}V`
-                : `${c.value}Ω`}
+              {c.type === 'battery' ? `${Number(c.value).toFixed(1)}V` : `${c.value}Ω`}
             </text>
           </g>
         );

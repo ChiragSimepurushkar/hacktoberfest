@@ -2,30 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft, BarChart2, Image, AlertTriangle, CheckCircle2,
-  Play, Pause, RotateCcw, StepForward, ChevronDown, ChevronUp,
-  Info, X
+  RotateCcw, StepForward, X,
 } from 'lucide-react';
-import { useRunStore } from '../store/run.js';
-import { compileFreeBody }    from '../engines/freeBodyCompiler.js';
-import { compileCircuit }     from '../engines/circuitCompiler.js';
-import { compileStateMachine } from '../engines/stateMachineCompiler.js';
-import FreeBodyStage   from '../components/sim/FreeBodyStage.jsx';
-import CircuitStage    from '../components/sim/CircuitStage.jsx';
-import StateMachineStage from '../components/sim/StateMachineStage.jsx';
-import ParamSlider     from '../components/ui/ParamSlider.jsx';
+import { useRunStore }    from '../store/run.js';
+import { createController } from '../engines/mountInterface.js';
+import FreeBodyStage      from '../components/sim/FreeBodyStage.jsx';
+import CircuitStage       from '../components/sim/CircuitStage.jsx';
+import StateMachineStage  from '../components/sim/StateMachineStage.jsx';
 
 const STAGE_MAP = {
   free_body:     FreeBodyStage,
   circuit:       CircuitStage,
   state_machine: StateMachineStage,
-};
-
-const VECTOR_COLORS = {
-  gravity:  '#D9531E',
-  normal:   '#2F5FD0',
-  applied:  '#C0392B',
-  friction: '#1F8A4C',
-  net:      '#14181F',
 };
 
 function getTypeLabel(type) {
@@ -36,28 +24,64 @@ function getTypeLabel(type) {
   }[type] || 'Simulation';
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Main Simulation page
+════════════════════════════════════════════════════════════════ */
 export default function Simulation() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { diagramType, extractedData } = useRunStore();
+  const { id }      = useParams();
+  const navigate    = useNavigate();
+  const { diagramType, extractedData, imageUrl } = useRunStore();
 
-  const [photoOpen, setPhotoOpen]   = useState(false);
-  const [params, setParams]         = useState(null);
-  const { imageUrl }                = useRunStore();
+  const [photoOpen, setPhotoOpen] = useState(false);
 
-  // Load data
+  // ── Create SimController once per run ─────────────────────────────────
+  const controllerRef = useRef(null);
+  const [params,  setParams]  = useState([]);
+  const [results, setResults] = useState({});
+
   useEffect(() => {
-    if (!extractedData) {
-      navigate('/');
-      return;
+    if (!extractedData) { navigate('/'); return; }
+
+    // Destroy previous
+    controllerRef.current?.destroy();
+
+    // Create new controller via mount interface
+    const ctrl = createController(diagramType, extractedData);
+    controllerRef.current = ctrl;
+
+    if (ctrl) {
+      // Seed local param state from controller
+      setParams(ctrl.getParams());
+
+      // Subscribe to result updates
+      const unsub = ctrl.onResults((r) => setResults(r));
+
+      // When a feature is clicked on the stage, highlight its slider
+      ctrl.onSelect?.((path) => {
+        // Flash the slider for the selected path
+        const el = document.getElementById(`slider-${CSS.escape(path)}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('slider-flash');
+          setTimeout(() => el.classList.remove('slider-flash'), 800);
+        }
+      });
+
+      return () => { unsub(); ctrl.destroy(); };
     }
-    setParams(extractedData);
-  }, [extractedData]);
+  }, [diagramType, extractedData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!diagramType || !extractedData) return null;
 
   const StageComponent = STAGE_MAP[diagramType];
   const issueCount     = extractedData.audit?.detected_issues?.length || 0;
+  const ctrl           = controllerRef.current;
+
+  // Called by slider rows when a value changes
+  function handleSetParam(path, value) {
+    ctrl?.setParam(path, value);
+    setParams((prev) => prev.map((p) => (p.path === path ? { ...p, value } : p)));
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -84,76 +108,59 @@ export default function Simulation() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {issueCount > 0 ? (
-            <span
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '4px 10px', borderRadius: 99,
-                background: '#FFFBEB', border: '1px solid #FDE68A',
-                fontSize: 12, fontWeight: 500, color: 'var(--warn)',
-              }}
-            >
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', borderRadius: 99,
+              background: '#FFFBEB', border: '1px solid #FDE68A',
+              fontSize: 12, fontWeight: 500, color: 'var(--warn)',
+            }}>
               <AlertTriangle size={12} />
               {issueCount} issue{issueCount > 1 ? 's' : ''} found
             </span>
           ) : (
-            <span
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '4px 10px', borderRadius: 99,
-                background: '#ECFDF5', border: '1px solid #A7F3D0',
-                fontSize: 12, fontWeight: 500, color: 'var(--ok)',
-              }}
-            >
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', borderRadius: 99,
+              background: '#ECFDF5', border: '1px solid #A7F3D0',
+              fontSize: 12, fontWeight: 500, color: 'var(--ok)',
+            }}>
               <CheckCircle2 size={12} />
               No issues found
             </span>
           )}
-          <Link
-            to={`/sim/${id}/analysis`}
-            className="btn btn-secondary btn-sm"
-            id="view-analysis-btn"
-          >
-            <BarChart2 size={14} />
-            View Analysis
+          <Link to={`/sim/${id}/analysis`} className="btn btn-secondary btn-sm" id="view-analysis-btn">
+            <BarChart2 size={14} /> View Analysis
           </Link>
         </div>
       </div>
 
-      {/* ── Main layout: stage + side panel ── */}
+      {/* ── Main layout ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* Stage area */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <div
-            className="graph-paper"
-            style={{ width: '100%', height: '100%', position: 'relative' }}
-          >
+          <div className="graph-paper" style={{ width: '100%', height: '100%', position: 'relative' }}>
             {StageComponent && (
               <StageComponent
                 data={extractedData}
-                onParamsChange={setParams}
+                controller={ctrl}
               />
             )}
 
-            {/* Photo peek button */}
             {imageUrl && (
               <button
                 className="btn btn-secondary btn-sm"
                 id="photo-peek-btn"
                 onClick={() => setPhotoOpen(true)}
-                style={{
-                  position: 'absolute', bottom: 14, right: 14,
-                  gap: 6, fontSize: 12,
-                }}
+                style={{ position: 'absolute', bottom: 14, right: 14, gap: 6, fontSize: 12 }}
               >
-                <Image size={13} />
-                Original photo
+                <Image size={13} /> Original photo
               </button>
             )}
           </div>
         </div>
 
-        {/* Side panel */}
+        {/* Side panel — driven by controller.getParams() */}
         <div style={{
           width: 280,
           borderLeft: '1px solid var(--line)',
@@ -161,19 +168,19 @@ export default function Simulation() {
           overflowY: 'auto',
           flexShrink: 0,
         }}>
-          {params && diagramType === 'free_body' && (
-            <FreeBodyPanel data={params} />
-          )}
-          {params && diagramType === 'circuit' && (
-            <CircuitPanel data={params} />
-          )}
-          {params && diagramType === 'state_machine' && (
-            <StateMachinePanel data={params} />
-          )}
+          {diagramType === 'state_machine'
+            ? <StateMachinePanel controller={ctrl} data={extractedData} />
+            : <GenericParamPanel
+                params={params}
+                results={results}
+                onSetParam={handleSetParam}
+                controller={ctrl}
+              />
+          }
         </div>
       </div>
 
-      {/* Photo Slide-over */}
+      {/* Photo slide-over */}
       {photoOpen && (
         <PhotoSlideOver imageUrl={imageUrl} onClose={() => setPhotoOpen(false)} />
       )}
@@ -181,116 +188,75 @@ export default function Simulation() {
   );
 }
 
-/* ── Free-body side panel ── */
-function FreeBodyPanel({ data }) {
-  const [localData, setLocalData] = useState(data);
-
-  function updateForce(index, key, value) {
-    setLocalData((prev) => ({
-      ...prev,
-      forces: prev.forces.map((f, i) => (i === index ? { ...f, [key]: value } : f)),
-    }));
-  }
-
-  const forces = localData.forces || [];
-  const mass   = localData.mass   || 0;
-  const mu     = localData.friction_coeff || 0;
-
-  // Compute results
-  const netX = forces.reduce((sum, f) => sum + f.magnitude * Math.cos((f.angle * Math.PI) / 180), 0);
-  const netY = forces.reduce((sum, f) => sum + f.magnitude * Math.sin((f.angle * Math.PI) / 180), 0);
-  const netF = Math.sqrt(netX ** 2 + netY ** 2);
-  const accel = mass > 0 ? netF / mass : 0;
+/* ═══════════════════════════════════════════════════════════════
+   Generic slider panel — works for free_body and circuit
+   Driven entirely by ParamDef[] from controller.getParams()
+════════════════════════════════════════════════════════════════ */
+function GenericParamPanel({ params, results, onSetParam, controller }) {
+  // Group params by their `group` field
+  const groups = {};
+  params.forEach((p) => {
+    const g = p.group || 'Parameters';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(p);
+  });
 
   return (
     <div>
-      <PanelSection title="Parameters">
-        <SliderRow
-          label="Mass (kg)" value={mass} min={0.1} max={50} step={0.1}
-          onChange={(v) => setLocalData((p) => ({ ...p, mass: v }))}
-        />
-        <SliderRow
-          label="Friction μ" value={mu} min={0} max={1} step={0.01}
-          onChange={(v) => setLocalData((p) => ({ ...p, friction_coeff: v }))}
-        />
-        {forces.map((f, i) => {
-          const trace = data.audit?.inference_trace?.find((t) => t.field === `forces[${i}].magnitude`);
-          return (
-            <SliderRow
-              key={`${f.label}-${i}`}
-              label={`${capitalize(f.label)} force (N)`}
-              value={f.magnitude}
-              min={0}
-              max={200}
-              step={0.5}
-              inferred={trace?.source === 'inferred'}
-              inferredReason={trace?.reasoning}
-              color={VECTOR_COLORS[f.label]}
-              onChange={(v) => updateForce(i, 'magnitude', v)}
-            />
-          );
-        })}
-      </PanelSection>
+      {Object.entries(groups).map(([groupName, groupParams]) => (
+        <div key={groupName}>
+          <PanelSection title={groupName}>
+            {groupParams.map((p) => (
+              <SliderRow
+                key={p.path}
+                param={p}
+                onChange={(v) => onSetParam(p.path, v)}
+                onFocus={() => controller?.highlight?.(p.path)}
+                onBlur={() => controller?.highlight?.(null)}
+              />
+            ))}
+          </PanelSection>
+          <hr className="divider" />
+        </div>
+      ))}
 
-      <hr className="divider" />
-      <PanelSection title="Results">
-        <ResultRow label="Net Force (parallel)" value={`${netF.toFixed(1)} N`} />
-        <ResultRow label="Acceleration" value={`${accel.toFixed(2)} m/s²`} />
-        <ResultRow label="Object mass" value={`${mass} kg`} />
-      </PanelSection>
+      {Object.keys(results).length > 0 && (
+        <PanelSection title="Results">
+          {Object.entries(results).map(([label, value]) => (
+            <ResultRow key={label} label={label} value={value} />
+          ))}
+        </PanelSection>
+      )}
     </div>
   );
 }
 
-/* ── Circuit side panel ── */
-function CircuitPanel({ data }) {
-  const [components, setComponents] = useState(data.components || []);
-
-  function updateComp(i, value) {
-    setComponents((prev) => prev.map((c, j) => (j === i ? { ...c, value } : c)));
-  }
-
-  return (
-    <div>
-      <PanelSection title="Parameters">
-        {components.map((c, i) => (
-          <SliderRow
-            key={`${c.type}-${i}`}
-            label={`${c.label || capitalize(c.type)} (${c.type === 'battery' ? 'V' : 'Ω'})`}
-            value={c.value}
-            min={0}
-            max={c.type === 'battery' ? 30 : 10000}
-            step={c.type === 'battery' ? 0.1 : 10}
-            onChange={(v) => updateComp(i, v)}
-          />
-        ))}
-      </PanelSection>
-    </div>
-  );
-}
-
-/* ── State machine side panel ── */
-function StateMachinePanel({ data }) {
-  const [input, setInput] = useState('');
-  const [current, setCurrent] = useState(data.initial);
-  const [history, setHistory] = useState([data.initial]);
+/* ═══════════════════════════════════════════════════════════════
+   State-machine panel — uses controller's step/reset/getCurrentState
+════════════════════════════════════════════════════════════════ */
+function StateMachinePanel({ controller, data }) {
+  const [input,    setInput]    = useState('');
+  const [current,  setCurrent]  = useState(data.initial);
+  const [history,  setHistory]  = useState([data.initial]);
   const [accepted, setAccepted] = useState(null);
 
   function step() {
-    if (!input) return;
+    if (!input || !controller) return;
     const symbol = input[0];
-    const trans  = (data.transitions || []).find((t) => t.from === current && t.label === symbol);
-    if (trans) {
-      setCurrent(trans.to);
-      setHistory((h) => [...h, trans.to]);
+    const moved  = controller.step(symbol);
+    if (moved) {
+      const next = controller.getCurrentState();
+      setCurrent(next);
+      setHistory((h) => [...h, next]);
       setInput(input.slice(1));
       if (input.length === 1) {
-        setAccepted((data.accepting || []).includes(trans.to));
+        setAccepted((data.accepting || []).includes(next));
       }
     }
   }
 
   function reset() {
+    controller?.reset();
     setCurrent(data.initial);
     setHistory([data.initial]);
     setInput('');
@@ -358,7 +324,9 @@ function StateMachinePanel({ data }) {
   );
 }
 
-/* ── Shared panel pieces ── */
+/* ═══════════════════════════════════════════════════════════════
+   Shared panel primitives
+════════════════════════════════════════════════════════════════ */
 function PanelSection({ title, children }) {
   return (
     <div style={{ padding: '14px 16px' }}>
@@ -375,9 +343,17 @@ function PanelSection({ title, children }) {
   );
 }
 
-function SliderRow({ label, value, min, max, step, onChange, inferred, inferredReason, color }) {
+/**
+ * SliderRow — driven by a ParamDef object.
+ * Highlights the corresponding stage feature on focus/hover.
+ */
+function SliderRow({ param, onChange, onFocus, onBlur }) {
+  const { path, label, unit, min, max, step, value, inferred, inferredReason, color } = param;
   const [local, setLocal] = useState(value);
-  const [tip, setTip]     = useState(false);
+  const [tip,   setTip]   = useState(false);
+
+  // Keep local in sync when controller updates externally
+  useEffect(() => { setLocal(value); }, [value]);
 
   function handleChange(e) {
     const v = parseFloat(e.target.value);
@@ -385,19 +361,20 @@ function SliderRow({ label, value, min, max, step, onChange, inferred, inferredR
     onChange?.(v);
   }
 
+  const sliderId = `slider-${path}`;
+
   return (
-    <div>
+    <div id={sliderId}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 5 }}>
           {color && (
             <span style={{ width: 8, height: 8, borderRadius: 2, background: color, display: 'inline-block' }} />
           )}
-          {label}
+          {label}{unit ? ` (${unit})` : ''}
           {inferred && (
             <span
               style={{
-                position: 'relative',
-                width: 8, height: 8, borderRadius: '50%',
+                position: 'relative', width: 8, height: 8, borderRadius: '50%',
                 background: 'var(--info)', display: 'inline-block', cursor: 'help',
               }}
               title={inferredReason || 'Inferred from diagram'}
@@ -430,7 +407,11 @@ function SliderRow({ label, value, min, max, step, onChange, inferred, inferredR
         step={step}
         value={local}
         onChange={handleChange}
-        aria-label={label}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onMouseEnter={onFocus}
+        onMouseLeave={onBlur}
+        aria-label={`${label}${unit ? ' in ' + unit : ''}`}
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={local}
@@ -491,8 +472,4 @@ function PhotoSlideOver({ imageUrl, onClose }) {
       </div>
     </div>
   );
-}
-
-function capitalize(s) {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
