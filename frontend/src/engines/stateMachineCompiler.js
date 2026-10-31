@@ -4,15 +4,31 @@
  */
 
 /**
+ * Helper to normalize transition endpoints from any schema variant.
+ */
+export function normalizeTransition(tr) {
+  const from = tr.from || tr.from_state || tr.source || '';
+  const to = tr.to || tr.to_state || tr.target || '';
+  const label = tr.label ?? tr.symbol ?? tr.input ?? '';
+  return { from: String(from), to: String(to), label: String(label) };
+}
+
+/**
  * Executes a single transition step in the automaton.
  * @param {string} currentState
  * @param {string} symbol
  * @param {Array<{from: string, to: string, label: string}>} transitions
  * @returns {string|null} next state or null if no transition defined
  */
-export function stepTransition(currentState, symbol, transitions) {
-  const t = transitions.find((tr) => tr.from === currentState && tr.label === symbol);
-  return t ? t.to : null;
+export function stepTransition(currentState, symbol, transitions = []) {
+  const symStr = String(symbol);
+  for (const tr of transitions) {
+    const { from, to, label } = normalizeTransition(tr);
+    if (from === currentState && label === symStr) {
+      return to;
+    }
+  }
+  return null;
 }
 
 /**
@@ -23,7 +39,7 @@ export function stepTransition(currentState, symbol, transitions) {
  * @param {Array<string>} acceptingStates
  * @returns {{ trace: Array<{step: number, symbol: string, state: string}>, isAccepted: boolean, finalState: string }}
  */
-export function simulateStream(initialState, inputString, transitions, acceptingStates) {
+export function simulateStream(initialState, inputString, transitions = [], acceptingStates = []) {
   let state = initialState;
   const trace = [{ step: 0, symbol: "START", state }];
 
@@ -55,13 +71,14 @@ export function simulateStream(initialState, inputString, transitions, accepting
  * @param {object} data - validated StateMachine JSON from backend
  * @returns {object} Cytoscape scene configuration
  */
-export function compileStateMachine(data) {
+export function compileStateMachine(data = {}) {
   const states = data.states || ["q0"];
-  const transitions = data.transitions || [];
+  const rawTransitions = data.transitions || [];
   const initial = data.initial || states[0] || "q0";
   const accepting = data.accepting || [];
 
   const nodes = states.map((s) => ({
+    group: "nodes",
     data: {
       id: s,
       label: s,
@@ -71,14 +88,21 @@ export function compileStateMachine(data) {
     classes: `${accepting.includes(s) ? "accepting" : ""} ${s === initial ? "initial current" : ""}`.trim(),
   }));
 
-  const edges = transitions.map((t, idx) => ({
-    data: {
-      id: `e_${t.from}_${t.to}_${t.label}_${idx}`,
-      source: t.from,
-      target: t.to,
-      label: t.label,
-    },
-  }));
+  const edges = [];
+  rawTransitions.forEach((t, idx) => {
+    const { from, to, label } = normalizeTransition(t);
+    if (from && to) {
+      edges.push({
+        group: "edges",
+        data: {
+          id: `e_${from}_${to}_${label}_${idx}`,
+          source: from,
+          target: to,
+          label: label,
+        },
+      });
+    }
+  });
 
   return {
     engine: "state_machine",
@@ -86,7 +110,7 @@ export function compileStateMachine(data) {
     initial,
     accepting,
     currentState: initial,
-    transitions,
+    transitions: rawTransitions.map(normalizeTransition),
     states,
   };
 }

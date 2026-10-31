@@ -81,7 +81,7 @@ async def extract(image: UploadFile = File(...)):
             return {
                 "status": "ok",
                 "diagram_type": diagram_type,
-                "data": validated.model_dump(),
+                "data": validated.model_dump(by_alias=True),
             }
         except Exception as exc:
             last_error = str(exc)
