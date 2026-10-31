@@ -4,16 +4,20 @@ import os
 import io
 from PIL import Image
 
+from pathlib import Path
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path)
+load_dotenv()
 
 from prompts.classify import CLASSIFY_PROMPT, VALID_TYPES
 from prompts.free_body import FREE_BODY_EXTRACTION_PROMPT
 from prompts.circuit import CIRCUIT_EXTRACTION_PROMPT
 from prompts.state_machine import STATE_MACHINE_EXTRACTION_PROMPT
-
-load_dotenv()
 
 MAX_RETRIES = 2
 
