@@ -22,7 +22,7 @@ _EXTRACTION_PROMPTS = {
     "state_machine": STATE_MACHINE_EXTRACTION_PROMPT,
 }
 
-_MODEL_NAME = os.getenv("GEMMA_MODEL", "gemma-4-12b-it")
+_MODEL_NAME = os.getenv("GEMMA_MODEL", "gemma-4-26b-a4b-it")
 
 
 @lru_cache(maxsize=1)
@@ -57,7 +57,12 @@ def classify_image(image_bytes: bytes) -> str:
         contents=[CLASSIFY_PROMPT, _image_part(image_bytes)],
         config=types.GenerateContentConfig(
             temperature=0.0,
-            max_output_tokens=16,
+            # This model emits a hidden thinking trace before its answer and
+            # doesn't support thinking_budget=0 (400 INVALID_ARGUMENT), so the
+            # cap has to cover the thought tokens too, not just the one-word
+            # reply — 16 was silently eating the whole budget on the trace
+            # and leaving response.text == None for every image.
+            max_output_tokens=1024,
         ),
     )
     result = (response.text or "").strip().lower()
